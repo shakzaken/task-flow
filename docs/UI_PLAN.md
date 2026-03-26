@@ -1,6 +1,6 @@
-# UI Plan
+# Frontend Service Plan
 
-This document defines the Phase 1 plan for the `ui` project.
+This document defines the Phase 1 plan for the `frontend-service` project.
 
 The UI is a React + TypeScript application that lets a user create tasks and track task status through the API service.
 
@@ -24,6 +24,14 @@ Out of scope for this project:
 - direct database access
 - server-side task execution
 - real-time websockets in Phase 1
+
+Architecture rules for this project:
+
+- use Vite with React and TypeScript
+- prefer small functional components with explicit prop types
+- keep data-fetching logic out of presentation components when separation improves clarity
+- prefer local component state unless shared state is clearly required
+- handle loading, empty, and error states explicitly
 
 ---
 
@@ -132,7 +140,7 @@ Phase 1 rule:
 ## Recommended UI Structure
 
 ```text
-ui/
+frontend-service/
   src/
     api/
       client.ts
@@ -168,6 +176,7 @@ ui/
 - `components/ResizeImageForm.tsx`: image task input form
 - `components/SendEmailForm.tsx`: email task input form
 - `components/TaskStatusCard.tsx`: task state rendering
+- `hooks/useCreateTask.ts`: task-creation state and submission flow
 - `hooks/useTaskPolling.ts`: polling logic
 - `types/task.ts`: frontend task types
 
@@ -184,6 +193,7 @@ The MVP can be a single page with:
 - dynamic task form
 - submit button
 - latest submitted task status panel
+- explicit loading and error states for submit and polling flows
 
 ### Task Forms
 
@@ -259,18 +269,30 @@ Phase 1 note:
 
 ---
 
+## Testing Plan
+
+Required tests:
+
+- task type switching renders the correct form
+- `send_email` form validates required fields
+- `resize_image` upload flow sends the file before task creation
+- polling stops on `COMPLETED` and `FAILED`
+- API request failures and task failures render clear error states
+- loading and empty states are rendered intentionally, not left implicit
+
+---
+
 ## Recommended Frontend Stack
 
 - React
 - TypeScript
 - Vite
-- React Hook Form
-- Zod for client-side schema validation
 
 Keep state management simple in Phase 1:
 
 - local component state is enough
 - a small custom hook for polling is enough
+- add a form or validation library only if the forms become hard to reason about without one
 
 ---
 
@@ -297,25 +319,6 @@ Recommended UX:
 - `VITE_API_BASE_URL`
 
 If uploads are supported and served separately, keep the upload path derived from the same base URL unless backend architecture requires otherwise.
-
----
-
-## Testing Plan
-
-Required tests:
-
-- render task type selector
-- switch between task forms
-- submit `send_email` task
-- upload a file before submitting `resize_image`
-- submit `resize_image` task
-- show returned `task_id`
-- poll task status until terminal state
-- render failure state
-
-Useful integration tests:
-
-- mock API create-task response and polling lifecycle
 
 ---
 

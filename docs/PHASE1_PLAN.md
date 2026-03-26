@@ -16,9 +16,9 @@ Service-specific implementation details live in:
 
 Build a working MVP for asynchronous task submission and processing across three projects:
 
-- `api`: accepts task requests, persists task state, and publishes queue messages
-- `worker`: consumes queued work and executes supported task handlers
-- `ui`: submits tasks and tracks their status through the API
+- `api-service`: accepts task requests, persists task state, and publishes queue messages
+- `worker-service`: consumes queued work and executes supported task handlers
+- `frontend-service`: submits tasks and tracks their status through the API
 
 Phase 1 focuses on the core request-to-processing flow. Real-time updates, retries, advanced reliability patterns, and horizontal scaling belong to later phases.
 
@@ -61,6 +61,16 @@ These rules apply to the whole phase and must stay consistent across all project
 - The UI should treat polling as the Phase 1 status-update mechanism.
 - `resize_image` uploads should go through a separate upload step before task creation.
 - temporary uploads should be moved or attached to task-owned paths before worker execution.
+- file-based task inputs and outputs must live under a shared storage location visible to both `api-service` and `worker-service`.
+- task payloads should store relative file paths that both services resolve against the same shared storage root.
+- API request and response contracts should use explicit Pydantic models.
+- FastAPI routes should stay thin and use explicit dependency injection.
+- repository classes should own persistence concerns.
+- service classes should own orchestration and infrastructure access.
+- React components should stay small, typed, and focused on UI concerns.
+- Python services should use `uv` for dependency management.
+- each Python service should keep its own `.venv` inside its project directory.
+- `api-service` and `worker-service` should not share one Python virtual environment.
 
 Canonical task statuses for Phase 1:
 
@@ -98,13 +108,14 @@ Phase 1 requires these shared platform components:
 - PostgreSQL for persisted task records
 - RabbitMQ for background task delivery
 - local filesystem storage for file-based task inputs and outputs
+- a shared mounted storage path used by both `api-service` and `worker-service`
 - Docker Compose for local orchestration
 
 ---
 
 ## Deliverables
 
-- API, worker, and UI projects wired together end to end
+- `api-service`, `worker-service`, and `frontend-service` wired together end to end
 - a shared task lifecycle contract used consistently across services
 - a temporary-upload flow for `resize_image` with task-owned file paths
 - infrastructure needed to run the MVP locally
@@ -112,14 +123,24 @@ Phase 1 requires these shared platform components:
 
 ---
 
+## Testing Expectations
+
+- each service should include at least one meaningful automated test for every non-trivial flow it owns
+- Phase 1 testing should cover both supported task types end to end
+- failure paths should be tested explicitly for validation, processing, and status updates
+- any bug fixed during Phase 1 should add a regression test
+
+---
+
 ## Implementation Sequence
 
 1. Set up the repository structure and local infrastructure.
-2. Establish the shared task contract: supported task types, statuses, and payload ownership.
-3. Build the API task-creation and task-read flow.
-4. Build the worker consumption and task-execution flow.
-5. Build the UI submission and polling flow.
-6. Verify the complete path for `send_email` and `resize_image`.
+2. Initialize per-service Python environments with `uv` for `api-service` and `worker-service`.
+3. Establish the shared task contract: supported task types, statuses, and payload ownership.
+4. Build the API task-creation and task-read flow.
+5. Build the worker consumption and task-execution flow.
+6. Build the UI submission and polling flow.
+7. Verify the complete path for `send_email` and `resize_image`.
 
 Detailed implementation order for each project is documented in the service-specific plan files.
 
@@ -132,6 +153,7 @@ Phase 1 is complete when all of the following are true:
 - a user can submit either supported task type from the UI
 - `resize_image` uploads are stored temporarily before task creation
 - temporary uploads are attached to task-owned paths before worker execution
+- file-based task inputs are readable by `worker-service` after `api-service` saves them
 - the API persists each new task before background processing begins
 - the API publishes work to the queue after persistence succeeds
 - the worker consumes queued tasks and executes the correct handler
@@ -146,7 +168,7 @@ Phase 1 is complete when all of the following are true:
 
 - storage requirements can complicate the image-processing flow if upload handling expands too early
 - temporary uploads require cleanup so unused files do not accumulate
-- weak contract alignment between API, worker, and UI can cause payload or status drift
+- weak contract alignment between `api-service`, `worker-service`, and `frontend-service` can cause payload or status drift
 - publish-after-persist failure remains a known MVP reliability gap until a later phase addresses it
 
 ---

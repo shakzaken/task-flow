@@ -1,6 +1,6 @@
 # API Service Plan
 
-This document defines the Phase 1 plan for the `api` service.
+This document defines the Phase 1 plan for the `api-service` service.
 
 The API service is a FastAPI application responsible for receiving task creation requests, validating input, saving tasks in PostgreSQL, and publishing task messages to RabbitMQ.
 
@@ -25,6 +25,18 @@ Out of scope for this service:
 - long-running background processing
 - direct image resizing
 - direct email sending
+
+Architecture rules for this service:
+
+- keep FastAPI routes as regular functions
+- keep route handlers thin and focused on HTTP concerns
+- validate requests and responses with explicit Pydantic models
+- keep persistence logic inside repository classes
+- keep orchestration and infrastructure access inside service classes
+- inject repositories and services explicitly through FastAPI dependencies
+- use `uv` to manage Python dependencies for this service
+- keep this service in its own virtual environment at `api-service/.venv`
+- keep dependencies isolated in this service's own `pyproject.toml`
 
 ---
 
@@ -155,6 +167,20 @@ Recommended file lifecycle:
 3. during task creation, the API moves or attaches the file to a task-owned path such as `uploads/tasks/<task_id>/input.<ext>`
 4. the worker reads the task-owned file path from the task payload
 
+Shared storage rule:
+
+- `api-service` and `worker-service` must mount the same shared storage volume
+- both services should use the same internal storage root, for example `/shared-data`
+- the API should write files under that shared root so the worker can read them without copying files between services
+- task payloads should store relative paths such as `uploads/tasks/<task_id>/input.<ext>`, not host-specific absolute paths
+
+Example resolution:
+
+- shared storage root: `/shared-data`
+- temporary upload on disk: `/shared-data/uploads/tmp/<upload_id>.<ext>`
+- task-owned input on disk: `/shared-data/uploads/tasks/<task_id>/input.<ext>`
+- task payload value stored in PostgreSQL: `uploads/tasks/<task_id>/input.<ext>`
+
 Orphan upload handling:
 
 - temporary uploads that are never attached to a task are allowed to exist briefly
@@ -229,7 +255,8 @@ Phase 1 note:
 ## Suggested Project Structure
 
 ```text
-services/api/
+api-service/
+  .venv/
   app/
     api/
       routes/
@@ -243,6 +270,8 @@ services/api/
       session.py
       models/
         task.py
+      repositories/
+        task_repository.py
     schemas/
       task.py
       upload.py
@@ -255,6 +284,7 @@ services/api/
   tests/
   Dockerfile
   pyproject.toml
+  uv.lock
 ```
 
 ### Module Responsibilities
@@ -263,8 +293,10 @@ services/api/
 - `routes/health.py`: health checks
 - `routes/uploads.py`: required upload flow for `resize_image`
 - `schemas/task.py`: Pydantic request and response models
+- `schemas/upload.py`: Pydantic models for upload responses
 - `models/task.py`: SQLAlchemy task model
-- `services/task_service.py`: DB operations, upload attachment, and orchestration
+- `repositories/task_repository.py`: task persistence and lookup queries
+- `services/task_service.py`: task-creation orchestration, upload attachment, and queue publishing coordination
 - `services/publisher.py`: RabbitMQ integration
 - `services/storage.py`: file storage abstraction for temporary uploads and task-owned files
 
@@ -284,6 +316,7 @@ Recommended approach:
 - define one payload model per task type
 - map `task_type` to payload schema
 - reject mismatched payloads early
+- return explicit response schemas instead of raw dictionaries
 
 ### Persistence
 
@@ -293,14 +326,23 @@ Recommended stack:
 - SQLAlchemy
 - Alembic
 - psycopg
+- uv
 
 Persistence flow:
 
 1. create UUID
-2. insert task row with `PENDING`
-3. commit transaction
-4. publish RabbitMQ message
-5. return response
+2. validate payload into a typed schema
+3. attach temporary upload to a task-owned path when needed
+4. call the repository to insert the task row with `PENDING`
+5. commit transaction
+6. publish RabbitMQ message through a publisher service
+7. return a typed response model
+
+Repository and service split:
+
+- repository methods should create and fetch task rows only
+- `task_service.py` should coordinate validation, storage attachment, persistence, and publish flow
+- route handlers should not contain direct SQLAlchemy or RabbitMQ logic
 
 ### Storage
 
@@ -308,8 +350,11 @@ Recommendation for Phase 1:
 
 - use local filesystem storage
 - keep storage access behind `services/storage.py` so MinIO can replace it later without changing route or task logic
+- require a shared mounted directory that is visible to both `api-service` and `worker-service`
+- configure both services with the same storage root, for example `/shared-data`
 - store uploaded files first in a temporary directory such as `uploads/tmp/`
 - move or attach files into a task-owned path during `POST /tasks`
+- store relative file paths in PostgreSQL and resolve them against the shared storage root in application code
 - add TTL-based cleanup for temporary uploads that were never attached to a task
 
 ---
@@ -324,10 +369,17 @@ Recommendation for Phase 1:
 - `POSTGRES_PASSWORD`
 - `RABBITMQ_URL`
 - `STORAGE_MODE`
-- `LOCAL_STORAGE_PATH`
+- `LOCAL_STORAGE_PATH` for the shared storage root, for example `/shared-data`
 - `MINIO_ENDPOINT`
 - `MINIO_ACCESS_KEY`
 - `MINIO_SECRET_KEY`
+
+## Local Development Environment
+
+- manage this service with `uv`
+- create and use a dedicated environment at `api-service/.venv`
+- do not share a Python virtual environment with `worker-service`
+- keep local development dependencies aligned with the service's Docker image inputs
 
 ---
 
@@ -342,11 +394,15 @@ Required tests:
 - fetch existing task
 - return `404` for missing task
 - verify task row is created before publish logic completes
+- verify route handlers delegate to services instead of embedding persistence logic
+- verify dependency-injected services can be replaced in tests
 
 Optional tests:
 
 - upload file and return storage path
 - move a temporary upload into a task-owned path during task creation
+- verify uploaded files are written under the shared storage root
+- verify the stored task payload contains a relative path the worker can resolve
 - delete stale files from the temporary upload directory after TTL
 
 ---
@@ -362,24 +418,27 @@ Optional tests:
 - `POST /tasks` creates a task and returns `task_id`
 - `POST /uploads` stores `resize_image` inputs in a temporary local path
 - task creation moves or attaches uploaded files into a task-owned path
+- uploaded files are stored under a shared filesystem location visible to both `api-service` and `worker-service`
 - task is stored in PostgreSQL with `PENDING` status
 - message is published to RabbitMQ
 - `GET /tasks/{task_id}` returns the correct task state
 - API remains thin and does not execute task logic itself
+- task persistence is isolated in repositories and external integration is isolated in services
 
 ---
 
 ## Implementation Order
 
 1. bootstrap FastAPI project
-2. configure PostgreSQL connection and migrations
-3. create `tasks` table and ORM model
-4. implement request and response schemas
-5. implement `POST /tasks`
-6. implement RabbitMQ publisher
-7. implement `GET /tasks/{task_id}`
-8. implement `GET /health`
-9. implement `POST /uploads`
-10. attach or move temporary uploads during task creation
-11. add temporary upload cleanup
-12. add tests
+2. initialize `uv`, `pyproject.toml`, and `api-service/.venv`
+3. configure PostgreSQL connection and migrations
+4. create `tasks` table and ORM model
+5. implement request and response schemas
+6. implement `POST /tasks`
+7. implement RabbitMQ publisher
+8. implement `GET /tasks/{task_id}`
+9. implement `GET /health`
+10. implement `POST /uploads`
+11. attach or move temporary uploads during task creation
+12. add temporary upload cleanup
+13. add tests

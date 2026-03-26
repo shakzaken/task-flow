@@ -1,6 +1,6 @@
 # Worker Service Plan
 
-This document defines the Phase 1 plan for the `worker` service.
+This document defines the Phase 1 plan for the `worker-service` service.
 
 The worker service is responsible for consuming task messages from RabbitMQ, loading task data from PostgreSQL, executing task handlers, and updating task status.
 
@@ -24,6 +24,17 @@ Out of scope for this service:
 - accepting user task creation requests
 - owning API contracts for the UI
 - being the source of truth for task state
+
+Architecture rules for this service:
+
+- keep persistence logic inside repository classes
+- keep infrastructure and execution orchestration inside service classes
+- keep handler classes or modules focused on task-specific business logic
+- use explicit type hints and typed task payload models where practical
+- inject repositories and services explicitly so worker flows stay testable
+- use `uv` to manage Python dependencies for this service
+- keep this service in its own virtual environment at `worker-service/.venv`
+- keep dependencies isolated in this service's own `pyproject.toml`
 
 ---
 
@@ -146,14 +157,22 @@ Implementation notes:
 - use Pillow for image processing
 - read from local filesystem storage
 - expect the API to provide a task-owned file path, not a temporary upload path
+- expect the stored `image_path` to be relative to a shared storage root
 - write output to a deterministic task-specific path
+
+Shared storage rule:
+
+- `worker-service` must mount the same shared storage volume used by `api-service`
+- the worker should resolve paths such as `uploads/tasks/<task_id>/input.jpg` against a shared root such as `/shared-data`
+- the worker should not depend on API-container-only paths
 
 ---
 
 ## Suggested Project Structure
 
 ```text
-services/worker/
+worker-service/
+  .venv/
   app/
     consumers/
       task_consumer.py
@@ -163,6 +182,8 @@ services/worker/
       session.py
       models/
         task.py
+      repositories/
+        task_repository.py
     handlers/
       send_email.py
       resize_image.py
@@ -177,11 +198,13 @@ services/worker/
   tests/
   Dockerfile
   pyproject.toml
+  uv.lock
 ```
 
 ### Module Responsibilities
 
 - `consumers/task_consumer.py`: RabbitMQ subscription and message handling
+- `repositories/task_repository.py`: task lookup and status/result persistence
 - `services/task_executor.py`: orchestration of status transitions, handler dispatch, and threaded task execution
 - `handlers/send_email.py`: email task logic
 - `handlers/resize_image.py`: image resize logic
@@ -238,10 +261,11 @@ Status transition rules:
 
 Recommended implementation:
 
-- read current row by `task_id`
+- read current row by `task_id` through a repository
 - fail safely if task does not exist
 - commit after each meaningful state transition
 - keep DB sessions scoped to the worker thread that is processing the task
+- keep transition rules in the executor or a dedicated service, not in the repository
 
 ---
 
@@ -286,8 +310,15 @@ Phase 1 rule:
 - `WORKER_CONSUMER_QUEUE`
 - `WORKER_MAX_CONCURRENCY`
 - `EMAIL_PROVIDER_MODE`
-- `LOCAL_STORAGE_PATH`
-- `OUTPUT_STORAGE_PATH`
+- `LOCAL_STORAGE_PATH` for the shared storage root, for example `/shared-data`
+- `OUTPUT_STORAGE_PATH` if outputs need a separate configured subpath under the shared root
+
+## Local Development Environment
+
+- manage this service with `uv`
+- create and use a dedicated environment at `worker-service/.venv`
+- do not share a Python virtual environment with `api-service`
+- keep local development dependencies aligned with the service's Docker image inputs
 
 ---
 
@@ -302,12 +333,15 @@ Required tests:
 - mark task as `FAILED` when handler throws
 - update status transitions correctly
 - write result payload on success
+- verify the repository is responsible for persistence updates
+- verify executor logic can be tested with injected fake services or repositories
 
 Useful integration tests:
 
 - consume message from RabbitMQ and update PostgreSQL end to end
 - verify resized image output exists
 - verify `resize_image` reads from a task-owned input path
+- verify `resize_image` resolves stored relative paths against the shared storage root
 
 ---
 
@@ -324,18 +358,21 @@ Useful integration tests:
 - worker loads task payload from PostgreSQL
 - worker updates status to `PROCESSING`
 - worker completes `send_email` and `resize_image`
+- worker can read files written by `api-service` through the shared storage mount
 - worker stores `result` on success
 - worker stores `error_message` and `FAILED` on error
+- worker keeps persistence concerns in repositories and orchestration concerns in services
 
 ---
 
 ## Implementation Order
 
 1. bootstrap worker project
-2. configure DB and RabbitMQ connectivity
-3. implement consumer
-4. implement task executor service
-5. implement `send_email` handler
-6. implement `resize_image` handler
-7. add optional `/health`
-8. add worker tests
+2. initialize `uv`, `pyproject.toml`, and `worker-service/.venv`
+3. configure DB and RabbitMQ connectivity
+4. implement consumer
+5. implement task executor service
+6. implement `send_email` handler
+7. implement `resize_image` handler
+8. add optional `/health`
+9. add worker tests
