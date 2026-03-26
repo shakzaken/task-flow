@@ -9,6 +9,7 @@ Service-specific implementation details live in:
 - `docs/API_PLAN.md`
 - `docs/WORKER_PLAN.md`
 - `docs/UI_PLAN.md`
+- `docs/LOCAL_INFRA_SETUP.md`
 
 ---
 

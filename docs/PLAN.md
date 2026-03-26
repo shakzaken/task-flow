@@ -2,6 +2,8 @@
 
 This document is the main implementation plan for the project.
 
+Local Homebrew-based PostgreSQL, RabbitMQ, and Redis setup is documented in `docs/LOCAL_INFRA_SETUP.md`.
+
 It currently covers only:
 
 - Phase 1: Core Task System (MVP)
