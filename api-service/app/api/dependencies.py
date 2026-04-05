@@ -1,33 +1,30 @@
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 from functools import lru_cache
 
 from fastapi import Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.db.repositories.task_repository import TaskRepository
-from app.db.session import SessionFactory, get_session_factory
+from app.db.session import AsyncSessionFactory, get_session_factory
 from app.services.publisher import Publisher, RabbitMQPublisher
 from app.services.storage import StorageService
 from app.services.task_service import TaskService
 
 
 @lru_cache
-def get_cached_session_factory() -> SessionFactory:
+def get_cached_session_factory() -> AsyncSessionFactory:
     settings = get_settings()
     return get_session_factory(settings.database_url)
 
 
-def get_db_session() -> Generator[Session, None, None]:
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     session_factory = get_cached_session_factory()
-    session = session_factory()
-    try:
+    async with session_factory() as session:
         yield session
-    finally:
-        session.close()
 
 
-def get_task_repository(session: Session = Depends(get_db_session)) -> TaskRepository:
+def get_task_repository(session: AsyncSession = Depends(get_db_session)) -> TaskRepository:
     return TaskRepository(session)
 
 
@@ -45,4 +42,3 @@ def get_task_service(
     publisher: Publisher = Depends(get_publisher_service),
 ) -> TaskService:
     return TaskService(repository=repository, storage=storage, publisher=publisher)
-

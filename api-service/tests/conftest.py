@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db_session, get_publisher_service, get_storage_service, get_task_service
 from app.db.base import Base
@@ -21,8 +21,13 @@ class RecordingPublisher(Publisher):
     def __init__(self) -> None:
         self.messages: list[tuple[str, str]] = []
 
-    def publish_task_created(self, task_id, task_type) -> None:
+    async def publish_task_created(self, task_id, task_type) -> None:
         self.messages.append((str(task_id), task_type.value))
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
 
 
 @pytest.fixture
@@ -31,21 +36,23 @@ def storage_root(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def session_factory(tmp_path: Path):
-    database_url = f"sqlite:///{tmp_path / 'test.db'}"
+async def session_factory(tmp_path: Path):
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'test.db'}"
     engine = get_engine(database_url)
-    Base.metadata.create_all(bind=engine)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
     yield get_session_factory(database_url)
-    Base.metadata.drop_all(bind=engine)
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
 
 
 @pytest.fixture
-def db_session(session_factory) -> Generator[Session, None, None]:
-    session = session_factory()
-    try:
+async def db_session(session_factory) -> AsyncGenerator[AsyncSession, None]:
+    async with session_factory() as session:
         yield session
-    finally:
-        session.close()
 
 
 @pytest.fixture
@@ -59,28 +66,33 @@ def storage_service(storage_root: Path) -> StorageService:
 
 
 @pytest.fixture
-def task_service(db_session: Session, storage_service: StorageService, recording_publisher: RecordingPublisher) -> TaskService:
+def task_service(
+    db_session: AsyncSession,
+    storage_service: StorageService,
+    recording_publisher: RecordingPublisher,
+) -> TaskService:
     repository = TaskRepository(db_session)
     return TaskService(repository=repository, storage=storage_service, publisher=recording_publisher)
 
 
 @pytest.fixture
-def app_client(db_session: Session, task_service: TaskService, storage_service: StorageService, recording_publisher: RecordingPublisher):
+async def app_client(
+    db_session: AsyncSession,
+    task_service: TaskService,
+    storage_service: StorageService,
+    recording_publisher: RecordingPublisher,
+) -> AsyncGenerator[AsyncClient, None]:
     app = create_app()
 
-    def override_get_db_session():
-        try:
-            yield db_session
-        finally:
-            pass
+    async def override_get_db_session() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
 
     app.dependency_overrides[get_db_session] = override_get_db_session
     app.dependency_overrides[get_task_service] = lambda: task_service
     app.dependency_overrides[get_storage_service] = lambda: storage_service
     app.dependency_overrides[get_publisher_service] = lambda: recording_publisher
 
-    with TestClient(app) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         yield client
 
     app.dependency_overrides.clear()
-

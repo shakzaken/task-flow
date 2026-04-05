@@ -31,11 +31,28 @@ class Settings(BaseSettings):
     )
 
     @property
-    def database_url(self) -> str:
+    def sync_database_url(self) -> str:
         if self.database_url_override:
+            if self.database_url_override.startswith("sqlite+aiosqlite:///"):
+                return self.database_url_override.replace("sqlite+aiosqlite:///", "sqlite:///", 1)
+            if self.database_url_override.startswith("postgresql+asyncpg://"):
+                return self.database_url_override.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
             return self.database_url_override
         return (
             f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def database_url(self) -> str:
+        if self.database_url_override:
+            if self.database_url_override.startswith("sqlite:///"):
+                return self.database_url_override.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+            if self.database_url_override.startswith("postgresql+psycopg://"):
+                return self.database_url_override.replace("postgresql+psycopg://", "postgresql+asyncpg://", 1)
+            return self.database_url_override
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 
