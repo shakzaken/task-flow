@@ -7,7 +7,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_db_session, get_publisher_service, get_storage_service, get_task_service
+from app.api.dependencies import get_db_session, get_storage_service, get_task_service
 from app.db.base import Base
 from app.db.repositories.task_repository import TaskRepository
 from app.db.session import get_engine, get_session_factory
@@ -82,7 +82,7 @@ async def app_client(
     storage_service: StorageService,
     recording_publisher: RecordingPublisher,
 ) -> AsyncGenerator[AsyncClient, None]:
-    app = create_app()
+    app = create_app(publisher=recording_publisher)
 
     async def override_get_db_session() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
@@ -90,7 +90,6 @@ async def app_client(
     app.dependency_overrides[get_db_session] = override_get_db_session
     app.dependency_overrides[get_task_service] = lambda: task_service
     app.dependency_overrides[get_storage_service] = lambda: storage_service
-    app.dependency_overrides[get_publisher_service] = lambda: recording_publisher
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         yield client

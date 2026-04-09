@@ -194,7 +194,7 @@ async def test_routes_delegate_to_service_via_dependency_override() -> None:
             }
 
     stub = StubTaskService()
-    app = create_app()
+    app = create_app(publisher=stub)
     app.dependency_overrides[get_task_service] = lambda: stub
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
@@ -219,7 +219,11 @@ async def test_routes_delegate_to_service_via_dependency_override() -> None:
 
 @pytest.mark.anyio
 async def test_dependency_injected_services_can_be_replaced_in_tests(tmp_path: Path) -> None:
-    app = create_app()
+    class NoopPublisher(Publisher):
+        async def publish_task_created(self, task_id, task_type) -> None:
+            return None
+
+    app = create_app(publisher=NoopPublisher())
 
     class FakeStorageService(StorageService):
         def __init__(self, root_path: Path) -> None:

@@ -1,13 +1,13 @@
 from collections.abc import AsyncGenerator
 from functools import lru_cache
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.db.repositories.task_repository import TaskRepository
 from app.db.session import AsyncSessionFactory, get_session_factory
-from app.services.publisher import Publisher, RabbitMQPublisher
+from app.services.publisher import Publisher
 from app.services.storage import StorageService
 from app.services.task_service import TaskService
 
@@ -32,8 +32,8 @@ def get_storage_service(settings: Settings = Depends(get_settings)) -> StorageSe
     return StorageService(settings.local_storage_path)
 
 
-def get_publisher_service(settings: Settings = Depends(get_settings)) -> Publisher:
-    return RabbitMQPublisher(settings.rabbitmq_url)
+def get_publisher_service(request: Request) -> Publisher:
+    return request.app.state.publisher
 
 
 def get_task_service(

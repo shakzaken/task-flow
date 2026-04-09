@@ -5,7 +5,12 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEFAULT_LOCAL_STORAGE_PATH = Path(__file__).resolve().parents[3] / "shared-data"
+
+
 class Settings(BaseSettings):
+    app_environment: str = Field(default="development", alias="APP_ENVIRONMENT")
+    cors_allowed_origins_raw: str = Field(default="", alias="CORS_ALLOWED_ORIGINS")
     database_url_override: str | None = Field(default=None, alias="DATABASE_URL")
     api_port: int = Field(default=8000, alias="API_PORT")
     postgres_host: str = Field(default="localhost", alias="POSTGRES_HOST")
@@ -18,17 +23,22 @@ class Settings(BaseSettings):
         alias="RABBITMQ_URL",
     )
     storage_mode: str = Field(default="local", alias="STORAGE_MODE")
-    local_storage_path: Path = Field(default=Path("/shared-data"), alias="LOCAL_STORAGE_PATH")
+    local_storage_path: Path = Field(default=DEFAULT_LOCAL_STORAGE_PATH, alias="LOCAL_STORAGE_PATH")
     minio_endpoint: str | None = Field(default=None, alias="MINIO_ENDPOINT")
     minio_access_key: str | None = Field(default=None, alias="MINIO_ACCESS_KEY")
     minio_secret_key: str | None = Field(default=None, alias="MINIO_SECRET_KEY")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=Path(__file__).resolve().parents[3] / ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         populate_by_name=True,
+        extra="ignore",
     )
+
+    @property
+    def cors_allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allowed_origins_raw.split(",") if origin.strip()]
 
     @property
     def sync_database_url(self) -> str:

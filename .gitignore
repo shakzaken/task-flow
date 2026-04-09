@@ -25,3 +25,5 @@ build/
 .vite/
 
 *.log
+
+shared-data/
