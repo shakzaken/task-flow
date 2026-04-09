@@ -15,6 +15,10 @@ This document defines the preferred engineering conventions for this project. Th
 * Use **repositories** for interacting with the database.
 * Use **services** for interacting with infrastructure components such as **cache** and **queues** (for example Redis or RabbitMQ), and for coordinating business flows when needed.
 * Keep **FastAPI routes** as regular functions, not class-based routes.
+* Use **async-first FastAPI design** unless a task explicitly states otherwise.
+* Prefer **async libraries** for database, queue, HTTP, and storage integrations when building FastAPI services.
+* Prefer `async def` for FastAPI route handlers, service methods, and repository methods that perform I/O.
+* If a synchronous library must be used, document the reason clearly and keep the blocking boundary explicit.
 
 ### Recommended structure
 
@@ -73,6 +77,5 @@ This document defines the preferred engineering conventions for this project. Th
 * Write code that is easy to debug and easy to remove if requirements change.
 
 ---
-
 
 

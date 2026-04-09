@@ -1,0 +1,272 @@
+:root {
+  color: #20161f;
+  background:
+    radial-gradient(circle at top left, rgba(232, 103, 61, 0.22), transparent 28%),
+    radial-gradient(circle at right 20%, rgba(33, 119, 170, 0.18), transparent 24%),
+    linear-gradient(135deg, #f4eadf 0%, #e8eef5 100%);
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.page-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 20px 64px;
+}
+
+.hero {
+  margin-bottom: 28px;
+  padding: 28px;
+  border: 1px solid rgba(32, 22, 31, 0.1);
+  border-radius: 28px;
+  background: rgba(255, 250, 245, 0.72);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 22px 60px rgba(32, 22, 31, 0.08);
+}
+
+.hero h1 {
+  margin: 10px 0 12px;
+  max-width: 12ch;
+  font-size: clamp(2.4rem, 5vw, 4.6rem);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+}
+
+.hero-copy {
+  max-width: 60ch;
+  margin: 0;
+  color: rgba(32, 22, 31, 0.78);
+}
+
+.layout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 20px;
+}
+
+.stack {
+  display: grid;
+  gap: 20px;
+}
+
+.panel {
+  padding: 22px;
+  border: 1px solid rgba(32, 22, 31, 0.12);
+  border-radius: 24px;
+  background: rgba(255, 252, 248, 0.9);
+  box-shadow: 0 16px 40px rgba(32, 22, 31, 0.07);
+}
+
+.selector-panel {
+  border: none;
+}
+
+.selector-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.selector-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid rgba(32, 22, 31, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.selector-card:hover,
+.selector-card-active {
+  transform: translateY(-2px);
+  border-color: rgba(196, 83, 44, 0.45);
+  box-shadow: 0 14px 28px rgba(196, 83, 44, 0.12);
+}
+
+.selector-card input {
+  margin: 0;
+}
+
+.selector-title {
+  font-weight: 700;
+}
+
+.selector-description,
+.inline-note,
+.empty-state {
+  color: rgba(32, 22, 31, 0.72);
+}
+
+.form-panel,
+.status-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.form-copy h2,
+.status-header h2 {
+  margin: 4px 0 0;
+  font-size: 1.55rem;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.78rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #b44f2a;
+}
+
+.field,
+.field-row {
+  display: grid;
+  gap: 8px;
+}
+
+.field-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.field span {
+  font-weight: 600;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(32, 22, 31, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.field textarea {
+  resize: vertical;
+}
+
+.field-error,
+.banner-error {
+  color: #8d2716;
+}
+
+.primary-button {
+  padding: 13px 18px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #bb4f28 0%, #9f2e4b 100%);
+  color: #fff8f0;
+  cursor: pointer;
+}
+
+.primary-button:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.banner {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+}
+
+.banner-error {
+  background: rgba(197, 44, 11, 0.11);
+}
+
+.status-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.status-pending,
+.status-processing {
+  background: rgba(203, 152, 35, 0.14);
+  color: #855f12;
+}
+
+.status-completed {
+  background: rgba(44, 132, 88, 0.14);
+  color: #1f6a45;
+}
+
+.status-failed {
+  background: rgba(197, 44, 11, 0.11);
+  color: #8d2716;
+}
+
+.status-grid {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.status-grid div {
+  display: grid;
+  gap: 4px;
+}
+
+.status-grid dt {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(32, 22, 31, 0.55);
+}
+
+.status-grid dd {
+  margin: 0;
+}
+
+.result-block {
+  margin: 0;
+  padding: 14px;
+  overflow-x: auto;
+  border-radius: 16px;
+  background: rgba(28, 55, 72, 0.08);
+}
+
+@media (max-width: 860px) {
+  .layout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .selector-grid,
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .page-shell {
+    padding: 28px 16px 48px;
+  }
+}
+
