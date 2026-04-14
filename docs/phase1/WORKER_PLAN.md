@@ -30,6 +30,7 @@ Architecture rules for this service:
 - keep persistence logic inside repository classes
 - keep infrastructure and execution orchestration inside service classes
 - keep handler classes or modules focused on task-specific business logic
+- keep the worker runtime sync-first for task execution in Phase 1
 - use explicit type hints and typed task payload models where practical
 - inject repositories and services explicitly so worker flows stay testable
 - use `uv` to manage Python dependencies for this service
@@ -226,6 +227,7 @@ Required runtime pattern:
 - submit each accepted task to a bounded thread pool
 - execute blocking task handlers inside worker threads
 - keep thread-pool size configurable
+- keep the FastAPI boundary small and keep task execution logic synchronous
 
 Why this is required in Phase 1:
 
@@ -239,6 +241,21 @@ Phase 1 rules:
 - do not implement task execution as a fully async per-task flow
 - do not create an unbounded number of threads
 - use explicit concurrency limits
+- prefer sync repositories and per-thread DB sessions for worker execution
+
+Concurrency guidance:
+
+- default `WORKER_MAX_CONCURRENCY` to `4` for Phase 1
+- use `2` for smaller local development environments
+- only raise concurrency after measuring CPU usage, memory usage, queue lag, and task latency
+- treat `WORKER_MAX_CONCURRENCY` as the main tuning knob for the worker
+
+Why `4` is a good default:
+
+- the Phase 1 workload is blocking and mixed between image processing and lightweight email work
+- `resize_image` can hold CPU time, memory, and a DB connection while processing
+- a small fixed pool is easier to reason about than aggressive parallelism in the MVP
+- it gives parallelism without creating avoidable contention on CPU, storage, and PostgreSQL
 
 ---
 
@@ -265,7 +282,15 @@ Recommended implementation:
 - fail safely if task does not exist
 - commit after each meaningful state transition
 - keep DB sessions scoped to the worker thread that is processing the task
+- use synchronous SQLAlchemy sessions inside worker threads
 - keep transition rules in the executor or a dedicated service, not in the repository
+
+Connection-pool guidance:
+
+- keep the DB pool aligned with worker concurrency
+- default `DB_POOL_SIZE` to match `WORKER_MAX_CONCURRENCY`
+- default `DB_MAX_OVERFLOW` to a small buffer such as `2`
+- do not size the worker thread pool higher than the DB pool without a clear reason
 
 ---
 
@@ -309,9 +334,25 @@ Phase 1 rule:
 - `RABBITMQ_URL`
 - `WORKER_CONSUMER_QUEUE`
 - `WORKER_MAX_CONCURRENCY`
+- `RABBITMQ_PREFETCH_COUNT`
+- `DB_POOL_SIZE`
+- `DB_MAX_OVERFLOW`
 - `EMAIL_PROVIDER_MODE`
 - `LOCAL_STORAGE_PATH` for the shared storage root, for example `/shared-data`
 - `OUTPUT_STORAGE_PATH` if outputs need a separate configured subpath under the shared root
+
+Recommended defaults:
+
+- `WORKER_MAX_CONCURRENCY=4`
+- `RABBITMQ_PREFETCH_COUNT=4`
+- `DB_POOL_SIZE=4`
+- `DB_MAX_OVERFLOW=2`
+
+Alignment rule:
+
+- keep `RABBITMQ_PREFETCH_COUNT` equal to `WORKER_MAX_CONCURRENCY`
+- keep `DB_POOL_SIZE` equal to `WORKER_MAX_CONCURRENCY`
+- keep `DB_MAX_OVERFLOW` small and bounded
 
 ## Local Development Environment
 

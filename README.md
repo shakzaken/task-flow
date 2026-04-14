@@ -4,6 +4,8 @@ Task Flow is an asynchronous task-processing application built around a FastAPI 
 
 Before running the application, create the `task_flow` PostgreSQL database in Postgres.
 
+Configure `LOCAL_STORAGE_PATH` in the root `.env` before starting the services. It must point to a writable directory on your machine that the API can use for shared file storage, for example `/Users/yakir/projects/claude/task-flow/shared-data`.
+
 Then start the local infrastructure expected by the root `.env`:
 
 - PostgreSQL
