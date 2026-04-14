@@ -127,6 +127,41 @@ async def test_fetch_existing_task(app_client: AsyncClient) -> None:
 
 
 @pytest.mark.anyio
+async def test_list_recent_tasks_returns_newest_first(app_client: AsyncClient) -> None:
+    first_response = await app_client.post(
+        "/tasks",
+        json={
+            "task_type": "send_email",
+            "payload": {
+                "to": "first@example.com",
+                "subject": "First",
+                "body": "First body",
+            },
+        },
+    )
+    second_response = await app_client.post(
+        "/tasks",
+        json={
+            "task_type": "send_email",
+            "payload": {
+                "to": "second@example.com",
+                "subject": "Second",
+                "body": "Second body",
+            },
+        },
+    )
+
+    response = await app_client.get("/tasks?limit=10")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [task["id"] for task in body["tasks"][:2]] == [
+        second_response.json()["task_id"],
+        first_response.json()["task_id"],
+    ]
+
+
+@pytest.mark.anyio
 async def test_missing_task_returns_404(app_client: AsyncClient) -> None:
     response = await app_client.get("/tasks/314d4dc8-31f8-44c9-b8a5-648370d4d40b")
 
@@ -193,6 +228,22 @@ async def test_routes_delegate_to_service_via_dependency_override() -> None:
                 "updated_at": "2026-01-01T00:00:00Z",
             }
 
+        async def list_recent_tasks(self, limit):
+            return {
+                "tasks": [
+                    {
+                        "id": "53ae8720-ae79-4480-b984-b4fbdcfc8838",
+                        "type": "send_email",
+                        "status": "PENDING",
+                        "payload": {},
+                        "result": None,
+                        "error_message": None,
+                        "created_at": "2026-01-01T00:00:00Z",
+                        "updated_at": "2026-01-01T00:00:00Z",
+                    }
+                ]
+            }
+
     stub = StubTaskService()
     app = create_app(publisher=stub)
     app.dependency_overrides[get_task_service] = lambda: stub
@@ -210,9 +261,11 @@ async def test_routes_delegate_to_service_via_dependency_override() -> None:
             },
         )
         read_response = await client.get("/tasks/53ae8720-ae79-4480-b984-b4fbdcfc8838")
+        list_response = await client.get("/tasks?limit=10")
 
     assert create_response.status_code == 202
     assert read_response.status_code == 200
+    assert list_response.status_code == 200
     assert stub.create_called is True
     assert stub.get_called is True
 
@@ -297,3 +350,22 @@ async def test_cleanup_stale_temporary_uploads(storage_service: StorageService) 
 
     assert "uploads/tmp/stale.txt" in deleted
     assert not stale_file.exists()
+
+
+@pytest.mark.anyio
+async def test_artifact_download_returns_output_file(app_client: AsyncClient, storage_service: StorageService) -> None:
+    output_path = storage_service.resolve_relative_path("outputs/task-1/output.png")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(b"fake-image")
+
+    response = await app_client.get("/artifacts/outputs/task-1/output.png")
+
+    assert response.status_code == 200
+    assert response.content == b"fake-image"
+
+
+@pytest.mark.anyio
+async def test_missing_artifact_returns_404(app_client: AsyncClient) -> None:
+    response = await app_client.get("/artifacts/outputs/missing.png")
+
+    assert response.status_code == 404

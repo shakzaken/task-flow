@@ -2,11 +2,16 @@ import { useState } from "react";
 
 import SendEmailForm from "../components/SendEmailForm";
 import ResizeImageForm from "../components/ResizeImageForm";
-import TaskStatusCard from "../components/TaskStatusCard";
+import TaskStatusPanel from "../components/TaskStatusPanel";
 import TaskTypeSelector from "../components/TaskTypeSelector";
 import { useCreateTask } from "../hooks/useCreateTask";
-import { useTaskPolling } from "../hooks/useTaskPolling";
-import type { ResizeImagePayload, SendEmailPayload, TaskType } from "../types/task";
+import { useRecentTasksPolling } from "../hooks/useRecentTasksPolling";
+import type {
+  ResizeImagePayload,
+  SendEmailPayload,
+  TaskResponse,
+  TaskType
+} from "../types/task";
 
 interface HomePageProps {
   pollingIntervalMs?: number;
@@ -14,34 +19,68 @@ interface HomePageProps {
 
 export default function HomePage({ pollingIntervalMs }: HomePageProps) {
   const [taskType, setTaskType] = useState<TaskType>("send_email");
-  const { error: submitError, isSubmitting, lastCreatedTask, submitTask } = useCreateTask();
-  const { error: pollingError, isPolling, task } = useTaskPolling(
-    lastCreatedTask?.task_id ?? null,
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [optimisticTasks, setOptimisticTasks] = useState<TaskResponse[]>([]);
+  const { error: submitError, isSubmitting, submitTask } = useCreateTask();
+  const { error: pollingError, isPolling, tasks } = useRecentTasksPolling(
+    refreshKey,
+    optimisticTasks,
     pollingIntervalMs
   );
 
-  async function handleSendEmailSubmit(payload: SendEmailPayload) {
-    await submitTask({
-      task_type: "send_email",
-      payload
+  function addOptimisticTask(
+    taskId: string,
+    type: TaskType,
+    payload: SendEmailPayload | ResizeImagePayload
+  ) {
+    const timestamp = new Date().toISOString();
+    const optimisticTask: TaskResponse = {
+      id: taskId,
+      type,
+      status: "PENDING",
+      payload: payload as unknown as Record<string, unknown>,
+      result: null,
+      error_message: null,
+      created_at: timestamp,
+      updated_at: timestamp
+    };
+
+    setOptimisticTasks((current) => {
+      const next = [optimisticTask, ...current.filter((task) => task.id !== taskId)];
+      return next.slice(0, 10);
     });
   }
 
+  async function handleSendEmailSubmit(payload: SendEmailPayload) {
+    const created = await submitTask({
+      task_type: "send_email",
+      payload
+    });
+    if (created) {
+      addOptimisticTask(created.task_id, "send_email", payload);
+      setRefreshKey((current) => current + 1);
+    }
+  }
+
   async function handleResizeImageSubmit(payload: ResizeImagePayload) {
-    await submitTask({
+    const created = await submitTask({
       task_type: "resize_image",
       payload
     });
+    if (created) {
+      addOptimisticTask(created.task_id, "resize_image", payload);
+      setRefreshKey((current) => current + 1);
+    }
   }
 
   return (
     <main className="page-shell">
       <section className="hero">
-        <p className="eyebrow">Phase 1 Control Surface</p>
-        <h1>Submit asynchronous tasks without losing sight of what the system is doing.</h1>
+        <p className="eyebrow">Task Flow Console</p>
+        <h1>Submit work and monitor queue activity in one place.</h1>
         <p className="hero-copy">
-          Use the API-backed forms below to create a task, receive a task id, and watch the status
-          move from pending to a terminal state.
+          Create email and image jobs from the control panel, then review the latest ten tasks and
+          their current status without leaving the page.
         </p>
       </section>
 
@@ -56,11 +95,11 @@ export default function HomePage({ pollingIntervalMs }: HomePageProps) {
           )}
         </section>
 
-        <TaskStatusCard
+        <TaskStatusPanel
           error={pollingError}
           isPolling={isPolling}
           isSubmitting={isSubmitting}
-          task={task}
+          tasks={tasks}
         />
       </div>
     </main>

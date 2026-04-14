@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -26,6 +26,7 @@ describe("App", () => {
 
   it("switches task types and renders the correct form", async () => {
     const user = userEvent.setup();
+    vi.mocked(globalThis.fetch).mockResolvedValue(createJsonResponse({ tasks: [] }));
     render(<App />);
 
     expect(screen.getByRole("textbox", { name: "To" })).toBeInTheDocument();
@@ -38,6 +39,7 @@ describe("App", () => {
 
   it("shows required validation for send_email fields", async () => {
     const user = userEvent.setup();
+    vi.mocked(globalThis.fetch).mockResolvedValue(createJsonResponse({ tasks: [] }));
     render(<App />);
 
     await user.click(screen.getByRole("button", { name: /create task/i }));
@@ -52,6 +54,7 @@ describe("App", () => {
     const fetchMock = vi.mocked(globalThis.fetch);
 
     fetchMock
+      .mockResolvedValueOnce(createJsonResponse({ tasks: [] }))
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ upload_id: "up-1", path: "uploads/tmp/up-1.png", filename: "demo.png" }), {
           status: 201,
@@ -65,25 +68,23 @@ describe("App", () => {
         })
       )
       .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            id: "task-1",
-            type: "resize_image",
-            status: "COMPLETED",
-            payload: { image_path: "uploads/tasks/task-1/input.png", width: 300, height: 200 },
-            result: { output_path: "outputs/task-1/output.png" },
-            error_message: null,
-            created_at: "2026-01-01T00:00:00Z",
-            updated_at: "2026-01-01T00:00:05Z"
-          }),
-          {
-            status: 200,
-            headers: { "Content-Type": "application/json" }
-          }
-        )
+        createJsonResponse({
+          tasks: [
+            {
+              id: "task-1",
+              type: "resize_image",
+              status: "COMPLETED",
+              payload: { image_path: "uploads/tasks/task-1/input.png", width: 300, height: 200 },
+              result: { output_path: "outputs/task-1/output.png" },
+              error_message: null,
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-01-01T00:00:05Z"
+            }
+          ]
+        })
       );
 
-    render(<App pollingIntervalMs={25} />);
+    render(<App pollingIntervalMs={1000} />);
 
     await user.click(screen.getByRole("radio", { name: /resize image/i }));
     await user.upload(
@@ -96,11 +97,12 @@ describe("App", () => {
     await user.type(screen.getByLabelText("Height"), "200");
     await user.click(screen.getByRole("button", { name: /upload and create task/i }));
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:8000/uploads");
-    expect(fetchMock.mock.calls[1]?.[0]).toBe("http://localhost:8000/tasks");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:8000/tasks?limit=10");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("http://localhost:8000/uploads");
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("http://localhost:8000/tasks");
 
-    const taskRequest = fetchMock.mock.calls[1]?.[1];
+    const taskRequest = fetchMock.mock.calls[2]?.[1];
     expect(taskRequest?.method).toBe("POST");
     expect(taskRequest?.body).toBe(
       JSON.stringify({
@@ -114,26 +116,52 @@ describe("App", () => {
     );
   });
 
-  it("stops polling after COMPLETED", async () => {
+  it("shows a new task immediately before the backend list catches up", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.mocked(globalThis.fetch);
 
     fetchMock
+      .mockResolvedValueOnce(createJsonResponse({ tasks: [] }))
+      .mockResolvedValueOnce(createJsonResponse({ task_id: "task-new", status: "PENDING" }, 202))
+      .mockResolvedValueOnce(createJsonResponse({ tasks: [] }));
+
+    render(<App pollingIntervalMs={1000} />);
+
+    await user.type(screen.getByRole("textbox", { name: "To" }), "user@example.com");
+    await user.type(screen.getByRole("textbox", { name: "Subject" }), "Welcome");
+    await user.type(screen.getByRole("textbox", { name: "Body" }), "Hello");
+    await user.click(screen.getByRole("button", { name: /create task/i }));
+
+    await waitFor(() => expect(screen.getByText("task-new")).toBeInTheDocument());
+    expect(screen.getByText("PENDING")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("renders a completed task in the recent activity feed", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.mocked(globalThis.fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(createJsonResponse({ tasks: [] }))
       .mockResolvedValueOnce(createJsonResponse({ task_id: "task-2", status: "PENDING" }, 202))
       .mockResolvedValueOnce(
         createJsonResponse({
-          id: "task-2",
-          type: "send_email",
-          status: "COMPLETED",
-          payload: {},
-          result: { delivered: true },
-          error_message: null,
-          created_at: "2026-01-01T00:00:00Z",
-          updated_at: "2026-01-01T00:00:02Z"
+          tasks: [
+            {
+              id: "task-2",
+              type: "resize_image",
+              status: "COMPLETED",
+              payload: { image_path: "uploads/tasks/task-2/input.png", width: 300, height: 200 },
+              result: { output_path: "outputs/task-2/output.png" },
+              error_message: null,
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-01-01T00:00:02Z"
+            }
+          ]
         })
       );
 
-    render(<App pollingIntervalMs={25} />);
+    render(<App pollingIntervalMs={1000} />);
 
     await user.type(screen.getByRole("textbox", { name: "To" }), "user@example.com");
     await user.type(screen.getByRole("textbox", { name: "Subject" }), "Welcome");
@@ -141,31 +169,130 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /create task/i }));
 
     await waitFor(() => expect(screen.getByText("COMPLETED")).toBeInTheDocument());
-
-    await new Promise((resolve) => window.setTimeout(resolve, 80));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Latest 10 task executions")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Download image" })).toHaveAttribute(
+      "href",
+      "http://localhost:8000/artifacts/outputs/task-2/output.png"
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it("stops polling after FAILED and shows the task error", async () => {
+  it("keeps polling while at least one recent task is not completed", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.mocked(globalThis.fetch);
+
+      fetchMock
+        .mockResolvedValueOnce(
+          createJsonResponse({
+            tasks: [
+              {
+                id: "task-pending",
+                type: "send_email",
+                status: "PENDING",
+                payload: {},
+                result: null,
+                error_message: null,
+                created_at: "2026-01-01T00:00:00Z",
+                updated_at: "2026-01-01T00:00:00Z"
+              }
+            ]
+          })
+        )
+        .mockResolvedValueOnce(
+          createJsonResponse({
+            tasks: [
+              {
+                id: "task-pending",
+                type: "send_email",
+                status: "PENDING",
+                payload: {},
+                result: null,
+                error_message: null,
+                created_at: "2026-01-01T00:00:00Z",
+                updated_at: "2026-01-01T00:00:01Z"
+              }
+            ]
+          })
+        );
+
+      render(<App pollingIntervalMs={25} />);
+
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(25);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops polling when all recent tasks are terminal", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.mocked(globalThis.fetch);
+
+      fetchMock.mockResolvedValueOnce(
+        createJsonResponse({
+          tasks: [
+            {
+              id: "task-done",
+              type: "send_email",
+              status: "COMPLETED",
+              payload: {},
+              result: { delivered: true },
+              error_message: null,
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-01-01T00:00:01Z"
+            }
+          ]
+        })
+      );
+
+      render(<App pollingIntervalMs={25} />);
+
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(80);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders a failed task in the recent activity feed", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.mocked(globalThis.fetch);
 
     fetchMock
+      .mockResolvedValueOnce(createJsonResponse({ tasks: [] }))
       .mockResolvedValueOnce(createJsonResponse({ task_id: "task-3", status: "PENDING" }, 202))
       .mockResolvedValueOnce(
         createJsonResponse({
-          id: "task-3",
-          type: "send_email",
-          status: "FAILED",
-          payload: {},
-          result: null,
-          error_message: "SMTP rejected the message.",
-          created_at: "2026-01-01T00:00:00Z",
-          updated_at: "2026-01-01T00:00:02Z"
+          tasks: [
+            {
+              id: "task-3",
+              type: "send_email",
+              status: "FAILED",
+              payload: {},
+              result: null,
+              error_message: "SMTP rejected the message.",
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-01-01T00:00:02Z"
+            }
+          ]
         })
       );
 
-    render(<App pollingIntervalMs={25} />);
+    render(<App pollingIntervalMs={1000} />);
 
     await user.type(screen.getByRole("textbox", { name: "To" }), "user@example.com");
     await user.type(screen.getByRole("textbox", { name: "Subject" }), "Welcome");
@@ -173,25 +300,27 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /create task/i }));
 
     await waitFor(() => expect(screen.getByText("SMTP rejected the message.")).toBeInTheDocument());
-
-    await new Promise((resolve) => window.setTimeout(resolve, 80));
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("renders request-level API failures and the empty state intentionally", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.mocked(globalThis.fetch);
 
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ detail: "Validation failed" }), {
-        status: 422,
-        headers: { "Content-Type": "application/json" }
-      })
-    );
+    fetchMock
+      .mockResolvedValueOnce(createJsonResponse({ tasks: [] }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: "Validation failed" }), {
+          status: 422,
+          headers: { "Content-Type": "application/json" }
+        })
+      );
 
     render(<App />);
 
-    expect(screen.getByText("No task yet. Submit a task to start tracking progress.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No tasks yet. Submit a task to start building the activity feed.")
+    ).toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: "To" }), "user@example.com");
     await user.type(screen.getByRole("textbox", { name: "Subject" }), "Welcome");
@@ -208,10 +337,11 @@ describe("App", () => {
     const fetchMock = vi.mocked(globalThis.fetch);
 
     fetchMock
+      .mockResolvedValueOnce(createJsonResponse({ tasks: [] }))
       .mockResolvedValueOnce(createJsonResponse({ task_id: "task-4", status: "PENDING" }, 202))
       .mockRejectedValueOnce(new Error("Network down"));
 
-    render(<App pollingIntervalMs={25} />);
+    render(<App pollingIntervalMs={1000} />);
 
     await user.type(screen.getByRole("textbox", { name: "To" }), "user@example.com");
     await user.type(screen.getByRole("textbox", { name: "Subject" }), "Welcome");

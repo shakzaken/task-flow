@@ -10,6 +10,7 @@ from app.schemas.task import (
     CreateTaskRequest,
     CreateTaskResponse,
     ResizeImagePayload,
+    TaskListResponse,
     TaskResponse,
     TaskStatus,
 )
@@ -77,6 +78,10 @@ class TaskService:
         if task is None:
             raise TaskNotFoundError(task_id)
         return self._to_task_response(task)
+
+    async def list_recent_tasks(self, limit: int) -> TaskListResponse:
+        tasks = await self.repository.list_recent_tasks(limit)
+        return TaskListResponse(tasks=[self._to_task_response(task) for task in tasks])
 
     async def cleanup_stale_uploads(self, ttl_seconds: int) -> list[str]:
         return await self.storage.cleanup_stale_uploads(ttl_seconds)

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.task import Task
@@ -33,6 +34,11 @@ class TaskRepository:
 
     async def get_task_by_id(self, task_id: UUID) -> Task | None:
         return await self.session.get(Task, task_id)
+
+    async def list_recent_tasks(self, limit: int) -> list[Task]:
+        statement = select(Task).order_by(desc(Task.created_at)).limit(limit)
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
 
     async def save(self) -> None:
         await self.session.commit()
