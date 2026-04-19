@@ -35,9 +35,12 @@ export interface TaskResponse {
   updated_at: string;
 }
 
+export interface TaskListResponse {
+  tasks: TaskResponse[];
+}
+
 export interface UploadResponse {
   upload_id: string;
   path: string;
   filename: string;
 }
-

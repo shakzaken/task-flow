@@ -6,16 +6,13 @@ import type { CreateTaskRequest, CreateTaskResponse } from "../types/task";
 export function useCreateTask() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastCreatedTask, setLastCreatedTask] = useState<CreateTaskResponse | null>(null);
 
   async function submitTask(request: CreateTaskRequest): Promise<CreateTaskResponse | null> {
     setIsSubmitting(true);
     setError(null);
 
     try {
-      const response = await createTask(request);
-      setLastCreatedTask(response);
-      return response;
+      return await createTask(request);
     } catch (submissionError) {
       const message =
         submissionError instanceof Error ? submissionError.message : "Failed to create task.";
@@ -29,8 +26,6 @@ export function useCreateTask() {
   return {
     error,
     isSubmitting,
-    lastCreatedTask,
     submitTask
   };
 }
-

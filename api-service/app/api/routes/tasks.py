@@ -1,9 +1,10 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import PositiveInt
 
 from app.api.dependencies import get_task_service
-from app.schemas.task import CreateTaskRequest, CreateTaskResponse, TaskResponse
+from app.schemas.task import CreateTaskRequest, CreateTaskResponse, TaskListResponse, TaskResponse
 from app.services.task_service import (
     TaskNotFoundError,
     TaskService,
@@ -25,6 +26,14 @@ async def create_task(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=exc.message,
         ) from exc
+
+
+@router.get("", response_model=TaskListResponse)
+async def list_tasks(
+    limit: PositiveInt = 10,
+    task_service: TaskService = Depends(get_task_service),
+) -> TaskListResponse:
+    return await task_service.list_recent_tasks(min(limit, 50))
 
 
 @router.get("/{task_id}", response_model=TaskResponse)

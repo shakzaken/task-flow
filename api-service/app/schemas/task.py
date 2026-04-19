@@ -65,3 +65,6 @@ class TaskResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
+class TaskListResponse(BaseModel):
+    tasks: list[TaskResponse]
