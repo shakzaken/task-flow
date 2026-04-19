@@ -30,7 +30,12 @@ class StorageService:
         await upload_file.close()
         return UploadResponse(upload_id=upload_id, path=relative_path.as_posix(), filename=filename)
 
-    async def attach_temporary_upload(self, temporary_path: str, task_id: str) -> str:
+    async def attach_temporary_upload(
+        self,
+        temporary_path: str,
+        task_id: str,
+        destination_stem: str = "input",
+    ) -> str:
         source = self.resolve_relative_path(temporary_path)
         if not await aiofiles.ospath.exists(source) or not await aiofiles.ospath.isfile(source):
             raise HTTPException(
@@ -39,7 +44,7 @@ class StorageService:
             )
 
         suffix = source.suffix
-        relative_destination = Path("uploads") / "tasks" / task_id / f"input{suffix}"
+        relative_destination = Path("uploads") / "tasks" / task_id / f"{destination_stem}{suffix}"
         destination = self.resolve_relative_path(relative_destination.as_posix())
         await AsyncPath(destination.parent).mkdir(parents=True, exist_ok=True)
         await aiofiles.os.rename(source, destination)

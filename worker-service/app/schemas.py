@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, PositiveInt, TypeAd
 class TaskType(str, Enum):
     RESIZE_IMAGE = "resize_image"
     SEND_EMAIL = "send_email"
+    MERGE_PDFS = "merge_pdfs"
 
 
 class TaskStatus(str, Enum):
@@ -32,11 +33,17 @@ class ResizeImagePayload(BaseModel):
     height: PositiveInt
 
 
-PayloadModel = SendEmailPayload | ResizeImagePayload
+class MergePdfsPayload(BaseModel):
+    first_pdf_path: str = Field(min_length=1)
+    second_pdf_path: str = Field(min_length=1)
+
+
+PayloadModel = SendEmailPayload | ResizeImagePayload | MergePdfsPayload
 
 PAYLOAD_TYPE_MAP: dict[TaskType, TypeAdapter[PayloadModel]] = {
     TaskType.SEND_EMAIL: TypeAdapter(SendEmailPayload),
     TaskType.RESIZE_IMAGE: TypeAdapter(ResizeImagePayload),
+    TaskType.MERGE_PDFS: TypeAdapter(MergePdfsPayload),
 }
 
 

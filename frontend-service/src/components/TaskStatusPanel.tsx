@@ -9,7 +9,13 @@ interface TaskStatusPanelProps {
 }
 
 function formatTaskType(type: TaskResponse["type"]) {
-  return type === "resize_image" ? "Resize Image" : "Send Email";
+  if (type === "resize_image") {
+    return "Resize Image";
+  }
+  if (type === "merge_pdfs") {
+    return "Merge PDFs";
+  }
+  return "Send Email";
 }
 
 function formatTimestamp(value: string) {
@@ -72,7 +78,7 @@ export default function TaskStatusPanel({
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Download image
+                  {task.type === "merge_pdfs" ? "Download merged PDF" : "Download image"}
                 </a>
               ) : null}
               {task.status === "FAILED" && task.error_message ? (

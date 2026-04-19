@@ -84,7 +84,7 @@ textarea {
 
 .selector-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -121,6 +121,11 @@ textarea {
 .inline-note,
 .empty-state {
   color: rgba(32, 22, 31, 0.72);
+}
+
+.upload-reference-list {
+  display: grid;
+  gap: 4px;
 }
 
 .form-panel,

@@ -9,6 +9,7 @@ from app.db.repositories.task_repository import TaskRepository
 from app.schemas.task import (
     CreateTaskRequest,
     CreateTaskResponse,
+    MergePdfsPayload,
     ResizeImagePayload,
     TaskListResponse,
     TaskResponse,
@@ -56,6 +57,17 @@ class TaskService:
             payload["image_path"] = await self.storage.attach_temporary_upload(
                 temporary_path=validated_payload.image_path,
                 task_id=str(task_id),
+            )
+        elif isinstance(validated_payload, MergePdfsPayload):
+            payload["first_pdf_path"] = await self.storage.attach_temporary_upload(
+                temporary_path=validated_payload.first_pdf_path,
+                task_id=str(task_id),
+                destination_stem="input-1",
+            )
+            payload["second_pdf_path"] = await self.storage.attach_temporary_upload(
+                temporary_path=validated_payload.second_pdf_path,
+                task_id=str(task_id),
+                destination_stem="input-2",
             )
 
         try:

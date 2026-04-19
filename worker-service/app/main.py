@@ -28,7 +28,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         max_overflow=settings.db_max_overflow,
     )
     storage = StorageService(settings.local_storage_path, settings.output_storage_path)
-    email_sender = build_email_sender(settings.email_provider_mode)
+    email_sender = build_email_sender(
+        mode=settings.email_provider_mode,
+        resend_api_key=settings.resend_api_key,
+        resend_from_email=settings.resend_from_email,
+        resend_from_name=settings.resend_from_name,
+    )
     task_executor = TaskExecutor(
         session_factory=session_factory,
         storage=storage,

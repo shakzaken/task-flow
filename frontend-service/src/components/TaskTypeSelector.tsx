@@ -12,6 +12,11 @@ const TASK_OPTIONS: Array<{ description: string; label: string; value: TaskType 
     description: "Submit a simple delivery task with recipient, subject, and message body."
   },
   {
+    value: "merge_pdfs",
+    label: "Merge PDFs",
+    description: "Upload two PDF documents and combine them into a single file in page order."
+  },
+  {
     value: "resize_image",
     label: "Resize Image",
     description: "Upload an image first, then create a resize task with explicit dimensions."
@@ -43,4 +48,3 @@ export default function TaskTypeSelector({ onChange, value }: TaskTypeSelectorPr
     </fieldset>
   );
 }
-

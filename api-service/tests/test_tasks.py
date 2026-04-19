@@ -73,6 +73,45 @@ async def test_create_resize_image_task(
 
 
 @pytest.mark.anyio
+async def test_create_merge_pdfs_task(
+    app_client: AsyncClient,
+    storage_service: StorageService,
+    recording_publisher: Publisher,
+) -> None:
+    first_upload_response = await app_client.post(
+        "/uploads",
+        files={"file": ("first.pdf", BytesIO(b"%PDF-first"), "application/pdf")},
+    )
+    second_upload_response = await app_client.post(
+        "/uploads",
+        files={"file": ("second.pdf", BytesIO(b"%PDF-second"), "application/pdf")},
+    )
+
+    response = await app_client.post(
+        "/tasks",
+        json={
+            "task_type": "merge_pdfs",
+            "payload": {
+                "first_pdf_path": first_upload_response.json()["path"],
+                "second_pdf_path": second_upload_response.json()["path"],
+            },
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "PENDING"
+    assert len(recording_publisher.messages) == 1
+
+    task_id = response.json()["task_id"]
+    first_attached_path = storage_service.resolve_relative_path(f"uploads/tasks/{task_id}/input-1.pdf")
+    second_attached_path = storage_service.resolve_relative_path(f"uploads/tasks/{task_id}/input-2.pdf")
+    assert first_attached_path.exists()
+    assert second_attached_path.exists()
+    assert not storage_service.resolve_relative_path(first_upload_response.json()["path"]).exists()
+    assert not storage_service.resolve_relative_path(second_upload_response.json()["path"]).exists()
+
+
+@pytest.mark.anyio
 async def test_rejects_unsupported_task_type(app_client: AsyncClient) -> None:
     response = await app_client.post(
         "/tasks",
@@ -337,6 +376,35 @@ async def test_resize_image_task_stores_relative_path(app_client: AsyncClient) -
     read_response = await app_client.get(f"/tasks/{task_id}")
     assert read_response.status_code == 200
     assert read_response.json()["payload"]["image_path"] == f"uploads/tasks/{task_id}/input.png"
+
+
+@pytest.mark.anyio
+async def test_merge_pdfs_task_stores_relative_paths(app_client: AsyncClient) -> None:
+    first_upload_response = await app_client.post(
+        "/uploads",
+        files={"file": ("first.pdf", BytesIO(b"%PDF-first"), "application/pdf")},
+    )
+    second_upload_response = await app_client.post(
+        "/uploads",
+        files={"file": ("second.pdf", BytesIO(b"%PDF-second"), "application/pdf")},
+    )
+
+    create_response = await app_client.post(
+        "/tasks",
+        json={
+            "task_type": "merge_pdfs",
+            "payload": {
+                "first_pdf_path": first_upload_response.json()["path"],
+                "second_pdf_path": second_upload_response.json()["path"],
+            },
+        },
+    )
+    task_id = create_response.json()["task_id"]
+
+    read_response = await app_client.get(f"/tasks/{task_id}")
+    assert read_response.status_code == 200
+    assert read_response.json()["payload"]["first_pdf_path"] == f"uploads/tasks/{task_id}/input-1.pdf"
+    assert read_response.json()["payload"]["second_pdf_path"] == f"uploads/tasks/{task_id}/input-2.pdf"
 
 
 @pytest.mark.anyio

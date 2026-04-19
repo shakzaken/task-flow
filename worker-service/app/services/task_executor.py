@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy.orm import sessionmaker
 
 from app.db.repositories.task_repository import TaskRepository
+from app.handlers.merge_pdfs import handle_merge_pdfs
 from app.handlers.resize_image import handle_resize_image
 from app.handlers.send_email import handle_send_email
 from app.schemas import PAYLOAD_TYPE_MAP, TaskType
@@ -54,6 +55,8 @@ class TaskExecutor:
                     result = handle_send_email(payload_model, self.email_sender)
                 elif task_type is TaskType.RESIZE_IMAGE:
                     result = handle_resize_image(task.id, payload_model, self.storage)
+                elif task_type is TaskType.MERGE_PDFS:
+                    result = handle_merge_pdfs(task.id, payload_model, self.storage)
                 else:
                     raise ValueError(f"Unsupported task type: {task_type.value}")
 

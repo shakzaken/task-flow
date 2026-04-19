@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import MergePdfsForm from "../components/MergePdfsForm";
 import SendEmailForm from "../components/SendEmailForm";
 import ResizeImageForm from "../components/ResizeImageForm";
 import TaskStatusPanel from "../components/TaskStatusPanel";
@@ -7,6 +8,7 @@ import TaskTypeSelector from "../components/TaskTypeSelector";
 import { useCreateTask } from "../hooks/useCreateTask";
 import { useRecentTasksPolling } from "../hooks/useRecentTasksPolling";
 import type {
+  MergePdfsPayload,
   ResizeImagePayload,
   SendEmailPayload,
   TaskResponse,
@@ -31,7 +33,7 @@ export default function HomePage({ pollingIntervalMs }: HomePageProps) {
   function addOptimisticTask(
     taskId: string,
     type: TaskType,
-    payload: SendEmailPayload | ResizeImagePayload
+    payload: MergePdfsPayload | SendEmailPayload | ResizeImagePayload
   ) {
     const timestamp = new Date().toISOString();
     const optimisticTask: TaskResponse = {
@@ -73,6 +75,17 @@ export default function HomePage({ pollingIntervalMs }: HomePageProps) {
     }
   }
 
+  async function handleMergePdfsSubmit(payload: MergePdfsPayload) {
+    const created = await submitTask({
+      task_type: "merge_pdfs",
+      payload
+    });
+    if (created) {
+      addOptimisticTask(created.task_id, "merge_pdfs", payload);
+      setRefreshKey((current) => current + 1);
+    }
+  }
+
   return (
     <main className="page-shell">
       <section className="hero">
@@ -90,6 +103,8 @@ export default function HomePage({ pollingIntervalMs }: HomePageProps) {
           {submitError ? <p className="banner banner-error">Request failed: {submitError}</p> : null}
           {taskType === "send_email" ? (
             <SendEmailForm disabled={isSubmitting} onSubmit={handleSendEmailSubmit} />
+          ) : taskType === "merge_pdfs" ? (
+            <MergePdfsForm disabled={isSubmitting} onSubmit={handleMergePdfsSubmit} />
           ) : (
             <ResizeImageForm disabled={isSubmitting} onSubmit={handleResizeImageSubmit} />
           )}
