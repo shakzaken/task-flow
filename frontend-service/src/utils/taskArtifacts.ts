@@ -6,7 +6,7 @@ export function getTaskDownloadUrl(task: TaskResponse): string | null {
     return null;
   }
 
-  if (task.type !== "resize_image" && task.type !== "merge_pdfs") {
+  if (task.type !== "resize_image" && task.type !== "merge_pdfs" && task.type !== "summarize_pdf") {
     return null;
   }
 

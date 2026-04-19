@@ -112,6 +112,38 @@ async def test_create_merge_pdfs_task(
 
 
 @pytest.mark.anyio
+async def test_create_summarize_pdf_task(
+    app_client: AsyncClient,
+    storage_service: StorageService,
+    recording_publisher: Publisher,
+) -> None:
+    upload_response = await app_client.post(
+        "/uploads",
+        files={"file": ("report.pdf", BytesIO(b"%PDF-report"), "application/pdf")},
+    )
+    temporary_path = upload_response.json()["path"]
+
+    response = await app_client.post(
+        "/tasks",
+        json={
+            "task_type": "summarize_pdf",
+            "payload": {
+                "pdf_path": temporary_path,
+            },
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "PENDING"
+    assert len(recording_publisher.messages) == 1
+
+    task_id = response.json()["task_id"]
+    attached_path = storage_service.resolve_relative_path(f"uploads/tasks/{task_id}/input.pdf")
+    assert attached_path.exists()
+    assert not storage_service.resolve_relative_path(temporary_path).exists()
+
+
+@pytest.mark.anyio
 async def test_rejects_unsupported_task_type(app_client: AsyncClient) -> None:
     response = await app_client.post(
         "/tasks",
@@ -405,6 +437,29 @@ async def test_merge_pdfs_task_stores_relative_paths(app_client: AsyncClient) ->
     assert read_response.status_code == 200
     assert read_response.json()["payload"]["first_pdf_path"] == f"uploads/tasks/{task_id}/input-1.pdf"
     assert read_response.json()["payload"]["second_pdf_path"] == f"uploads/tasks/{task_id}/input-2.pdf"
+
+
+@pytest.mark.anyio
+async def test_summarize_pdf_task_stores_relative_path(app_client: AsyncClient) -> None:
+    upload_response = await app_client.post(
+        "/uploads",
+        files={"file": ("report.pdf", BytesIO(b"%PDF-report"), "application/pdf")},
+    )
+
+    create_response = await app_client.post(
+        "/tasks",
+        json={
+            "task_type": "summarize_pdf",
+            "payload": {
+                "pdf_path": upload_response.json()["path"],
+            },
+        },
+    )
+    task_id = create_response.json()["task_id"]
+
+    read_response = await app_client.get(f"/tasks/{task_id}")
+    assert read_response.status_code == 200
+    assert read_response.json()["payload"]["pdf_path"] == f"uploads/tasks/{task_id}/input.pdf"
 
 
 @pytest.mark.anyio

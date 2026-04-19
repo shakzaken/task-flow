@@ -12,6 +12,7 @@ class TaskType(str, Enum):
     RESIZE_IMAGE = "resize_image"
     SEND_EMAIL = "send_email"
     MERGE_PDFS = "merge_pdfs"
+    SUMMARIZE_PDF = "summarize_pdf"
 
 
 class TaskStatus(str, Enum):
@@ -38,12 +39,17 @@ class MergePdfsPayload(BaseModel):
     second_pdf_path: str = Field(min_length=1)
 
 
-PayloadModel = SendEmailPayload | ResizeImagePayload | MergePdfsPayload
+class SummarizePdfPayload(BaseModel):
+    pdf_path: str = Field(min_length=1)
+
+
+PayloadModel = SendEmailPayload | ResizeImagePayload | MergePdfsPayload | SummarizePdfPayload
 
 PAYLOAD_TYPE_MAP: dict[TaskType, TypeAdapter[PayloadModel]] = {
     TaskType.SEND_EMAIL: TypeAdapter(SendEmailPayload),
     TaskType.RESIZE_IMAGE: TypeAdapter(ResizeImagePayload),
     TaskType.MERGE_PDFS: TypeAdapter(MergePdfsPayload),
+    TaskType.SUMMARIZE_PDF: TypeAdapter(SummarizePdfPayload),
 }
 
 

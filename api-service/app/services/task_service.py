@@ -11,6 +11,7 @@ from app.schemas.task import (
     CreateTaskResponse,
     MergePdfsPayload,
     ResizeImagePayload,
+    SummarizePdfPayload,
     TaskListResponse,
     TaskResponse,
     TaskStatus,
@@ -68,6 +69,11 @@ class TaskService:
                 temporary_path=validated_payload.second_pdf_path,
                 task_id=str(task_id),
                 destination_stem="input-2",
+            )
+        elif isinstance(validated_payload, SummarizePdfPayload):
+            payload["pdf_path"] = await self.storage.attach_temporary_upload(
+                temporary_path=validated_payload.pdf_path,
+                task_id=str(task_id),
             )
 
         try:

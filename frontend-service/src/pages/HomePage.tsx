@@ -3,6 +3,7 @@ import { useState } from "react";
 import MergePdfsForm from "../components/MergePdfsForm";
 import SendEmailForm from "../components/SendEmailForm";
 import ResizeImageForm from "../components/ResizeImageForm";
+import SummarizePdfForm from "../components/SummarizePdfForm";
 import TaskStatusPanel from "../components/TaskStatusPanel";
 import TaskTypeSelector from "../components/TaskTypeSelector";
 import { useCreateTask } from "../hooks/useCreateTask";
@@ -11,6 +12,7 @@ import type {
   MergePdfsPayload,
   ResizeImagePayload,
   SendEmailPayload,
+  SummarizePdfPayload,
   TaskResponse,
   TaskType
 } from "../types/task";
@@ -33,7 +35,7 @@ export default function HomePage({ pollingIntervalMs }: HomePageProps) {
   function addOptimisticTask(
     taskId: string,
     type: TaskType,
-    payload: MergePdfsPayload | SendEmailPayload | ResizeImagePayload
+    payload: MergePdfsPayload | SendEmailPayload | ResizeImagePayload | SummarizePdfPayload
   ) {
     const timestamp = new Date().toISOString();
     const optimisticTask: TaskResponse = {
@@ -86,6 +88,17 @@ export default function HomePage({ pollingIntervalMs }: HomePageProps) {
     }
   }
 
+  async function handleSummarizePdfSubmit(payload: SummarizePdfPayload) {
+    const created = await submitTask({
+      task_type: "summarize_pdf",
+      payload
+    });
+    if (created) {
+      addOptimisticTask(created.task_id, "summarize_pdf", payload);
+      setRefreshKey((current) => current + 1);
+    }
+  }
+
   return (
     <main className="page-shell">
       <section className="hero">
@@ -105,6 +118,8 @@ export default function HomePage({ pollingIntervalMs }: HomePageProps) {
             <SendEmailForm disabled={isSubmitting} onSubmit={handleSendEmailSubmit} />
           ) : taskType === "merge_pdfs" ? (
             <MergePdfsForm disabled={isSubmitting} onSubmit={handleMergePdfsSubmit} />
+          ) : taskType === "summarize_pdf" ? (
+            <SummarizePdfForm disabled={isSubmitting} onSubmit={handleSummarizePdfSubmit} />
           ) : (
             <ResizeImageForm disabled={isSubmitting} onSubmit={handleResizeImageSubmit} />
           )}

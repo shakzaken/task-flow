@@ -15,6 +15,9 @@ function formatTaskType(type: TaskResponse["type"]) {
   if (type === "merge_pdfs") {
     return "Merge PDFs";
   }
+  if (type === "summarize_pdf") {
+    return "Summarize PDF";
+  }
   return "Send Email";
 }
 
@@ -78,7 +81,11 @@ export default function TaskStatusPanel({
                   target="_blank"
                   rel="noreferrer"
                 >
-                  {task.type === "merge_pdfs" ? "Download merged PDF" : "Download image"}
+                  {task.type === "merge_pdfs"
+                    ? "Download merged PDF"
+                    : task.type === "summarize_pdf"
+                      ? "Download summary PDF"
+                      : "Download image"}
                 </a>
               ) : null}
               {task.status === "FAILED" && task.error_message ? (
