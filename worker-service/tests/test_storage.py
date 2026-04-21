@@ -1,4 +1,3 @@
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -6,23 +5,19 @@ import pytest
 from app.services.storage import StorageService
 
 
-def test_resolve_relative_path_stays_under_root(tmp_path: Path) -> None:
-    storage = StorageService(tmp_path)
+def test_normalize_key_accepts_bucket_relative_paths() -> None:
+    resolved = StorageService.normalize_key("uploads/tasks/abc/input.jpg")
 
-    resolved = storage.resolve_relative_path("uploads/tasks/abc/input.jpg")
-
-    assert resolved == (tmp_path / "uploads" / "tasks" / "abc" / "input.jpg").resolve()
+    assert resolved == "uploads/tasks/abc/input.jpg"
 
 
-def test_resolve_relative_path_rejects_escape(tmp_path: Path) -> None:
-    storage = StorageService(tmp_path)
-
+def test_normalize_key_rejects_escape() -> None:
     with pytest.raises(ValueError):
-        storage.resolve_relative_path("../outside.txt")
+        StorageService.normalize_key("../outside.txt")
 
 
-def test_build_output_relative_path_uses_task_scope(tmp_path: Path) -> None:
-    storage = StorageService(tmp_path, "outputs")
+def test_build_output_relative_path_uses_task_scope(storage_service: StorageService) -> None:
+    storage = storage_service
 
     output_path = storage.build_output_relative_path(uuid4(), "uploads/tasks/id/input.png")
 

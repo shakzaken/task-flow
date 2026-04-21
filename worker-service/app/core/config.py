@@ -5,9 +5,6 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-DEFAULT_LOCAL_STORAGE_PATH = Path(__file__).resolve().parents[3] / "shared-data"
-
-
 class Settings(BaseSettings):
     database_url_override: str | None = Field(default=None, alias="DATABASE_URL")
     postgres_host: str = Field(default="localhost", alias="POSTGRES_HOST")
@@ -30,15 +27,20 @@ class Settings(BaseSettings):
     resend_from_name: str = Field(default="Task Flow", alias="RESEND_FROM_NAME")
     openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
     openrouter_model: str = Field(default="openrouter/free", alias="OPENROUTER_MODEL")
-    local_storage_path: Path = Field(default=DEFAULT_LOCAL_STORAGE_PATH, alias="LOCAL_STORAGE_PATH")
+    s3_endpoint: str | None = Field(default=None, alias="S3_ENDPOINT")
+    s3_region: str = Field(default="us-east-1", alias="S3_REGION")
+    s3_bucket: str = Field(default="task-flow", alias="S3_BUCKET")
+    s3_access_key_id: str | None = Field(default=None, alias="S3_ACCESS_KEY_ID")
+    s3_secret_access_key: str | None = Field(default=None, alias="S3_SECRET_ACCESS_KEY")
+    s3_use_ssl: bool = Field(default=True, alias="S3_USE_SSL")
+    s3_force_path_style: bool = Field(default=False, alias="S3_FORCE_PATH_STYLE")
+    s3_auto_create_bucket: bool = Field(default=False, alias="S3_AUTO_CREATE_BUCKET")
     output_storage_path: str = Field(default="outputs", alias="OUTPUT_STORAGE_PATH")
+    worker_work_root: Path | None = Field(default=None, alias="WORKER_WORK_ROOT")
     worker_port: int = Field(default=8001, alias="WORKER_PORT")
 
     model_config = SettingsConfigDict(
-        env_file=(
-            Path(__file__).resolve().parents[3] / ".env",
-            Path(__file__).resolve().parents[2] / ".env",
-        ),
+        env_file=Path(__file__).resolve().parents[2] / ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         populate_by_name=True,

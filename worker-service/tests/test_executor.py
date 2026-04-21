@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from uuid import uuid4
 
 from PIL import Image
@@ -57,14 +56,16 @@ def test_execute_handler_failure_marks_task_failed(
 def test_execute_resize_image_writes_output(
     repository: TaskRepository,
     task_executor: TaskExecutor,
-    storage_root: Path,
+    storage_service,
 ) -> None:
     task_id = uuid4()
     input_relative_path = "uploads/tasks/sample/input.png"
-    input_path = storage_root / input_relative_path
-    input_path.parent.mkdir(parents=True, exist_ok=True)
-    with Image.new("RGB", (10, 10), color="red") as image:
-        image.save(input_path, format="PNG")
+    from io import BytesIO
+
+    with BytesIO() as image_bytes:
+        with Image.new("RGB", (10, 10), color="red") as image:
+            image.save(image_bytes, format="PNG")
+        storage_service.objects[input_relative_path] = image_bytes.getvalue()
 
     repository.create_task(
         task_id=task_id,
@@ -86,34 +87,35 @@ def test_execute_resize_image_writes_output(
     assert db_task is not None
     assert db_task.status == TaskStatus.COMPLETED.value
     assert db_task.result is not None
-    output_path = storage_root / db_task.result["output_path"]
-    assert output_path.exists()
-    with Image.open(output_path) as output_image:
+    output_bytes = storage_service.objects[db_task.result["output_path"]]
+    from io import BytesIO
+
+    with Image.open(BytesIO(output_bytes)) as output_image:
         assert output_image.size == (4, 6)
 
 
 def test_execute_merge_pdfs_writes_output(
     repository: TaskRepository,
     task_executor: TaskExecutor,
-    storage_root: Path,
+    storage_service,
 ) -> None:
     task_id = uuid4()
     first_input_relative_path = "uploads/tasks/sample/input-1.pdf"
     second_input_relative_path = "uploads/tasks/sample/input-2.pdf"
-    first_input_path = storage_root / first_input_relative_path
-    second_input_path = storage_root / second_input_relative_path
-    first_input_path.parent.mkdir(parents=True, exist_ok=True)
-
     first_writer = PdfWriter()
     first_writer.add_blank_page(width=72, height=72)
-    with first_input_path.open("wb") as first_file:
+    from io import BytesIO
+
+    with BytesIO() as first_file:
         first_writer.write(first_file)
+        storage_service.objects[first_input_relative_path] = first_file.getvalue()
 
     second_writer = PdfWriter()
     second_writer.add_blank_page(width=144, height=144)
     second_writer.add_blank_page(width=216, height=216)
-    with second_input_path.open("wb") as second_file:
+    with BytesIO() as second_file:
         second_writer.write(second_file)
+        storage_service.objects[second_input_relative_path] = second_file.getvalue()
 
     repository.create_task(
         task_id=task_id,
@@ -136,9 +138,8 @@ def test_execute_merge_pdfs_writes_output(
     assert db_task.result is not None
     assert db_task.result["page_count"] == 3
 
-    output_path = storage_root / db_task.result["output_path"]
-    assert output_path.exists()
-    with output_path.open("rb") as output_file:
+    output_bytes = storage_service.objects[db_task.result["output_path"]]
+    with BytesIO(output_bytes) as output_file:
         reader = PdfReader(output_file)
         assert len(reader.pages) == 3
         assert float(reader.pages[0].mediabox.width) == 72
@@ -149,18 +150,18 @@ def test_execute_merge_pdfs_writes_output(
 def test_execute_summarize_pdf_writes_output(
     repository: TaskRepository,
     task_executor: TaskExecutor,
-    storage_root: Path,
+    storage_service,
 ) -> None:
     task_id = uuid4()
     input_relative_path = "uploads/tasks/sample/input.pdf"
-    input_path = storage_root / input_relative_path
-    input_path.parent.mkdir(parents=True, exist_ok=True)
-
     writer = PdfWriter()
     writer.add_blank_page(width=144, height=144)
     writer.add_metadata({"/Title": "Quarterly Report"})
-    with input_path.open("wb") as input_file:
+    from io import BytesIO
+
+    with BytesIO() as input_file:
         writer.write(input_file)
+        storage_service.objects[input_relative_path] = input_file.getvalue()
 
     # Add extractable text by appending a second PDF that contains text-like metadata
     # is not enough, so use page contents from pypdf-free tests via simple writer output
@@ -202,8 +203,7 @@ def test_execute_summarize_pdf_writes_output(
     assert db_task.result["page_count"] == 2
     assert db_task.result["summary_model"] == "openrouter/free"
 
-    output_path = storage_root / db_task.result["output_path"]
-    assert output_path.exists()
-    with output_path.open("rb") as output_file:
+    output_bytes = storage_service.objects[db_task.result["output_path"]]
+    with BytesIO(output_bytes) as output_file:
         reader = PdfReader(output_file)
         assert len(reader.pages) >= 1

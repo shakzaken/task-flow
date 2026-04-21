@@ -28,7 +28,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
     )
-    storage = StorageService(settings.local_storage_path, settings.output_storage_path)
+    storage = StorageService(
+        bucket=settings.s3_bucket,
+        region=settings.s3_region,
+        endpoint_url=settings.s3_endpoint,
+        access_key_id=settings.s3_access_key_id,
+        secret_access_key=settings.s3_secret_access_key,
+        use_ssl=settings.s3_use_ssl,
+        force_path_style=settings.s3_force_path_style,
+        auto_create_bucket=settings.s3_auto_create_bucket,
+        work_root=settings.worker_work_root,
+        output_root=settings.output_storage_path,
+    )
+    storage.ensure_ready()
     email_sender = build_email_sender(
         mode=settings.email_provider_mode,
         resend_api_key=settings.resend_api_key,
@@ -60,6 +72,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await consumer.close()
+        storage.close()
         thread_pool.shutdown(wait=True)
 
 

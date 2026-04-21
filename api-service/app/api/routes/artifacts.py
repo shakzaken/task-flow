@@ -1,7 +1,5 @@
-from pathlib import Path
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import get_storage_service
 from app.services.storage import StorageService
@@ -13,9 +11,10 @@ router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 async def get_artifact(
     relative_path: str,
     storage_service: StorageService = Depends(get_storage_service),
-) -> FileResponse:
-    artifact_path = storage_service.resolve_relative_path(relative_path)
-    if not artifact_path.exists() or not artifact_path.is_file():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Artifact was not found.")
-
-    return FileResponse(path=artifact_path, filename=Path(relative_path).name)
+) -> StreamingResponse:
+    artifact = await storage_service.get_artifact(relative_path)
+    return StreamingResponse(
+        artifact.body,
+        media_type=artifact.media_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{artifact.filename}"'},
+    )

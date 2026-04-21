@@ -15,6 +15,7 @@ from app.main import create_app
 from app.services.publisher import Publisher
 from app.services.storage import StorageService
 from app.services.task_service import TaskService
+from tests.fakes import FakeStorageService
 
 
 class RecordingPublisher(Publisher):
@@ -28,11 +29,6 @@ class RecordingPublisher(Publisher):
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
-
-
-@pytest.fixture
-def storage_root(tmp_path: Path) -> Path:
-    return tmp_path / "shared-storage"
 
 
 @pytest.fixture
@@ -61,8 +57,8 @@ def recording_publisher() -> RecordingPublisher:
 
 
 @pytest.fixture
-def storage_service(storage_root: Path) -> StorageService:
-    return StorageService(storage_root)
+def storage_service() -> FakeStorageService:
+    return FakeStorageService()
 
 
 @pytest.fixture

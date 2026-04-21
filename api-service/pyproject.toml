@@ -5,6 +5,7 @@ description = "Phase 1 API service for asynchronous task creation"
 requires-python = ">=3.13"
 dependencies = [
   "aio-pika>=9.5.0",
+  "aioboto3>=15.1.0",
   "aiofiles>=24.1.0",
   "aiosqlite>=0.21.0",
   "alembic>=1.16.0",

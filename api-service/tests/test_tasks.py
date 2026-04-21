@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from app.schemas.task import CreateTaskRequest, TaskStatus, TaskType
 from app.services.publisher import Publisher
 from app.services.storage import StorageService
 from app.services.task_service import TaskService
+from tests.fakes import FakeStorageService, StoredObject
 
 
 @pytest.mark.anyio
@@ -67,9 +69,8 @@ async def test_create_resize_image_task(
     assert len(recording_publisher.messages) == 1
 
     task_id = response.json()["task_id"]
-    attached_path = storage_service.resolve_relative_path(f"uploads/tasks/{task_id}/input.jpg")
-    assert attached_path.exists()
-    assert not storage_service.resolve_relative_path(temporary_path).exists()
+    assert f"uploads/tasks/{task_id}/input.jpg" in storage_service.objects
+    assert temporary_path not in storage_service.objects
 
 
 @pytest.mark.anyio
@@ -103,12 +104,10 @@ async def test_create_merge_pdfs_task(
     assert len(recording_publisher.messages) == 1
 
     task_id = response.json()["task_id"]
-    first_attached_path = storage_service.resolve_relative_path(f"uploads/tasks/{task_id}/input-1.pdf")
-    second_attached_path = storage_service.resolve_relative_path(f"uploads/tasks/{task_id}/input-2.pdf")
-    assert first_attached_path.exists()
-    assert second_attached_path.exists()
-    assert not storage_service.resolve_relative_path(first_upload_response.json()["path"]).exists()
-    assert not storage_service.resolve_relative_path(second_upload_response.json()["path"]).exists()
+    assert f"uploads/tasks/{task_id}/input-1.pdf" in storage_service.objects
+    assert f"uploads/tasks/{task_id}/input-2.pdf" in storage_service.objects
+    assert first_upload_response.json()["path"] not in storage_service.objects
+    assert second_upload_response.json()["path"] not in storage_service.objects
 
 
 @pytest.mark.anyio
@@ -138,9 +137,8 @@ async def test_create_summarize_pdf_task(
     assert len(recording_publisher.messages) == 1
 
     task_id = response.json()["task_id"]
-    attached_path = storage_service.resolve_relative_path(f"uploads/tasks/{task_id}/input.pdf")
-    assert attached_path.exists()
-    assert not storage_service.resolve_relative_path(temporary_path).exists()
+    assert f"uploads/tasks/{task_id}/input.pdf" in storage_service.objects
+    assert temporary_path not in storage_service.objects
 
 
 @pytest.mark.anyio
@@ -259,7 +257,7 @@ async def test_task_row_is_created_before_publish_completes(tmp_path: Path) -> N
         await connection.run_sync(Base.metadata.create_all)
 
     async with get_session_factory(database_url)() as session:
-        storage = StorageService(tmp_path / "storage")
+        storage = FakeStorageService()
         publisher = CheckingPublisher(database_url)
         service = TaskService(repository=TaskRepository(session), storage=storage, publisher=publisher)
 
@@ -349,16 +347,16 @@ async def test_dependency_injected_services_can_be_replaced_in_tests(tmp_path: P
 
     app = create_app(publisher=NoopPublisher())
 
-    class FakeStorageService(StorageService):
-        def __init__(self, root_path: Path) -> None:
-            super().__init__(root_path)
+    class CheckingStorageService(FakeStorageService):
+        def __init__(self) -> None:
+            super().__init__()
             self.store_called = False
 
         async def store_temporary_upload(self, upload_file):
             self.store_called = True
             return await super().store_temporary_upload(upload_file)
 
-    fake_storage = FakeStorageService(tmp_path / "storage")
+    fake_storage = CheckingStorageService()
     app.dependency_overrides[get_storage_service] = lambda: fake_storage
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
@@ -464,22 +462,25 @@ async def test_summarize_pdf_task_stores_relative_path(app_client: AsyncClient) 
 
 @pytest.mark.anyio
 async def test_cleanup_stale_temporary_uploads(storage_service: StorageService) -> None:
-    uploads_root = storage_service.resolve_relative_path("uploads/tmp")
-    uploads_root.mkdir(parents=True, exist_ok=True)
-    stale_file = uploads_root / "stale.txt"
-    stale_file.write_text("stale", encoding="utf-8")
+    storage_service.objects["uploads/tmp/stale.txt"] = StoredObject(
+        body=b"stale",
+        last_modified=datetime.fromtimestamp(0, tz=timezone.utc),
+        content_type="text/plain",
+    )
 
     deleted = await storage_service.cleanup_stale_uploads(ttl_seconds=0)
 
     assert "uploads/tmp/stale.txt" in deleted
-    assert not stale_file.exists()
+    assert "uploads/tmp/stale.txt" not in storage_service.objects
 
 
 @pytest.mark.anyio
 async def test_artifact_download_returns_output_file(app_client: AsyncClient, storage_service: StorageService) -> None:
-    output_path = storage_service.resolve_relative_path("outputs/task-1/output.png")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_bytes(b"fake-image")
+    storage_service.objects["outputs/task-1/output.png"] = StoredObject(
+        body=b"fake-image",
+        last_modified=datetime.now(timezone.utc),
+        content_type="image/png",
+    )
 
     response = await app_client.get("/artifacts/outputs/task-1/output.png")
 

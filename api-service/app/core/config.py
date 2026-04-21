@@ -5,9 +5,6 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-DEFAULT_LOCAL_STORAGE_PATH = Path(__file__).resolve().parents[3] / "shared-data"
-
-
 class Settings(BaseSettings):
     app_environment: str = Field(default="development", alias="APP_ENVIRONMENT")
     cors_allowed_origins_raw: str = Field(default="", alias="CORS_ALLOWED_ORIGINS")
@@ -24,14 +21,17 @@ class Settings(BaseSettings):
     )
     redis_url: str | None = Field(default=None, alias="REDIS_URL")
     rate_limit_prefix: str = Field(default="rate-limit", alias="RATE_LIMIT_PREFIX")
-    storage_mode: str = Field(default="local", alias="STORAGE_MODE")
-    local_storage_path: Path = Field(default=DEFAULT_LOCAL_STORAGE_PATH, alias="LOCAL_STORAGE_PATH")
-    minio_endpoint: str | None = Field(default=None, alias="MINIO_ENDPOINT")
-    minio_access_key: str | None = Field(default=None, alias="MINIO_ACCESS_KEY")
-    minio_secret_key: str | None = Field(default=None, alias="MINIO_SECRET_KEY")
+    s3_endpoint: str | None = Field(default=None, alias="S3_ENDPOINT")
+    s3_region: str = Field(default="us-east-1", alias="S3_REGION")
+    s3_bucket: str = Field(default="task-flow", alias="S3_BUCKET")
+    s3_access_key_id: str | None = Field(default=None, alias="S3_ACCESS_KEY_ID")
+    s3_secret_access_key: str | None = Field(default=None, alias="S3_SECRET_ACCESS_KEY")
+    s3_use_ssl: bool = Field(default=True, alias="S3_USE_SSL")
+    s3_force_path_style: bool = Field(default=False, alias="S3_FORCE_PATH_STYLE")
+    s3_auto_create_bucket: bool = Field(default=False, alias="S3_AUTO_CREATE_BUCKET")
 
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parents[3] / ".env",
+        env_file=Path(__file__).resolve().parents[2] / ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         populate_by_name=True,

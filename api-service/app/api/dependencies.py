@@ -28,8 +28,21 @@ def get_task_repository(session: AsyncSession = Depends(get_db_session)) -> Task
     return TaskRepository(session)
 
 
-def get_storage_service(settings: Settings = Depends(get_settings)) -> StorageService:
-    return StorageService(settings.local_storage_path)
+def build_storage_service(settings: Settings) -> StorageService:
+    return StorageService(
+        bucket=settings.s3_bucket,
+        region=settings.s3_region,
+        endpoint_url=settings.s3_endpoint,
+        access_key_id=settings.s3_access_key_id,
+        secret_access_key=settings.s3_secret_access_key,
+        use_ssl=settings.s3_use_ssl,
+        force_path_style=settings.s3_force_path_style,
+        auto_create_bucket=settings.s3_auto_create_bucket,
+    )
+
+
+def get_storage_service(request: Request) -> StorageService:
+    return request.app.state.storage_service
 
 
 def get_publisher_service(request: Request) -> Publisher:
