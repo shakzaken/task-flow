@@ -15,6 +15,7 @@ from app.db.session import get_engine, get_session_factory
 from app.main import create_app
 from app.schemas import TaskStatus, TaskType
 from app.services.email_sender import FakeEmailSender
+from app.services.pdf_summary import PdfSummaryService
 from app.services.storage import StorageService
 from app.services.task_executor import TaskExecutor
 
@@ -73,12 +74,31 @@ def email_sender() -> FakeEmailSender:
     return FakeEmailSender()
 
 
+class FakePdfSummaryService(PdfSummaryService):
+    def summarize_document(self, text: str) -> dict[str, str]:
+        return {
+            "summary": f"Summary: {text[:60]}",
+            "model": "openrouter/free",
+        }
+
+
 @pytest.fixture
-def task_executor(session_factory, storage_service: StorageService, email_sender: FakeEmailSender) -> TaskExecutor:
+def pdf_summary_service() -> FakePdfSummaryService:
+    return FakePdfSummaryService()
+
+
+@pytest.fixture
+def task_executor(
+    session_factory,
+    storage_service: StorageService,
+    email_sender: FakeEmailSender,
+    pdf_summary_service: FakePdfSummaryService,
+) -> TaskExecutor:
     return TaskExecutor(
         session_factory=session_factory,
         storage=storage_service,
         email_sender=email_sender,
+        pdf_summary_service=pdf_summary_service,
     )
 
 

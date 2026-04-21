@@ -22,6 +22,8 @@ class Settings(BaseSettings):
         default="amqp://guest:guest@localhost:5672/%2F",
         alias="RABBITMQ_URL",
     )
+    redis_url: str | None = Field(default=None, alias="REDIS_URL")
+    rate_limit_prefix: str = Field(default="rate-limit", alias="RATE_LIMIT_PREFIX")
     storage_mode: str = Field(default="local", alias="STORAGE_MODE")
     local_storage_path: Path = Field(default=DEFAULT_LOCAL_STORAGE_PATH, alias="LOCAL_STORAGE_PATH")
     minio_endpoint: str | None = Field(default=None, alias="MINIO_ENDPOINT")

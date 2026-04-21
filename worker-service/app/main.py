@@ -11,6 +11,7 @@ from app.consumers.task_consumer import RabbitMQTaskConsumer, TaskConsumer
 from app.core.config import Settings, get_settings
 from app.db.session import get_session_factory
 from app.services.email_sender import build_email_sender
+from app.services.pdf_summary import build_pdf_summary_service
 from app.services.storage import StorageService
 from app.services.task_executor import TaskExecutor
 
@@ -28,11 +29,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         max_overflow=settings.db_max_overflow,
     )
     storage = StorageService(settings.local_storage_path, settings.output_storage_path)
-    email_sender = build_email_sender(settings.email_provider_mode)
+    email_sender = build_email_sender(
+        mode=settings.email_provider_mode,
+        resend_api_key=settings.resend_api_key,
+        resend_from_email=settings.resend_from_email,
+        resend_from_name=settings.resend_from_name,
+    )
+    pdf_summary_service = build_pdf_summary_service(
+        api_key=settings.openrouter_api_key,
+        model=settings.openrouter_model,
+    )
     task_executor = TaskExecutor(
         session_factory=session_factory,
         storage=storage,
         email_sender=email_sender,
+        pdf_summary_service=pdf_summary_service,
     )
     consumer: TaskConsumer = RabbitMQTaskConsumer(
         rabbitmq_url=settings.rabbitmq_url,

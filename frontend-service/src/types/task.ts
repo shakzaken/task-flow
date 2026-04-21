@@ -1,4 +1,4 @@
-export type TaskType = "resize_image" | "send_email";
+export type TaskType = "merge_pdfs" | "resize_image" | "send_email" | "summarize_pdf";
 
 export type TaskStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
@@ -14,9 +14,18 @@ export interface ResizeImagePayload {
   height: number;
 }
 
+export interface MergePdfsPayload {
+  first_pdf_path: string;
+  second_pdf_path: string;
+}
+
+export interface SummarizePdfPayload {
+  pdf_path: string;
+}
+
 export interface CreateTaskRequest {
   task_type: TaskType;
-  payload: SendEmailPayload | ResizeImagePayload;
+  payload: MergePdfsPayload | SendEmailPayload | ResizeImagePayload | SummarizePdfPayload;
 }
 
 export interface CreateTaskResponse {

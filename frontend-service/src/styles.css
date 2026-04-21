@@ -123,6 +123,11 @@ textarea {
   color: rgba(32, 22, 31, 0.72);
 }
 
+.upload-reference-list {
+  display: grid;
+  gap: 4px;
+}
+
 .form-panel,
 .status-panel {
   display: grid;

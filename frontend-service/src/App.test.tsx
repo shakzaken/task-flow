@@ -31,6 +31,17 @@ describe("App", () => {
 
     expect(screen.getByRole("textbox", { name: "To" })).toBeInTheDocument();
 
+    await user.click(screen.getByRole("radio", { name: /merge pdfs/i }));
+
+    expect(screen.getByLabelText("First PDF")).toBeInTheDocument();
+    expect(screen.getByLabelText("Second PDF")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "To" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /summarize pdf/i }));
+
+    expect(screen.getByLabelText("PDF File")).toBeInTheDocument();
+    expect(screen.queryByLabelText("First PDF")).not.toBeInTheDocument();
+
     await user.click(screen.getByRole("radio", { name: /resize image/i }));
 
     expect(screen.getByLabelText("Image File")).toBeInTheDocument();
@@ -116,6 +127,148 @@ describe("App", () => {
     );
   });
 
+  it("uploads both files before creating a merge_pdfs task", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.mocked(globalThis.fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(createJsonResponse({ tasks: [] }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ upload_id: "up-1", path: "uploads/tmp/up-1.pdf", filename: "first.pdf" }),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ upload_id: "up-2", path: "uploads/tmp/up-2.pdf", filename: "second.pdf" }),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ task_id: "task-pdf-1", status: "PENDING" }), {
+          status: 202,
+          headers: { "Content-Type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          tasks: [
+            {
+              id: "task-pdf-1",
+              type: "merge_pdfs",
+              status: "COMPLETED",
+              payload: {
+                first_pdf_path: "uploads/tasks/task-pdf-1/input-1.pdf",
+                second_pdf_path: "uploads/tasks/task-pdf-1/input-2.pdf"
+              },
+              result: { output_path: "outputs/task-pdf-1/output.pdf", page_count: 5 },
+              error_message: null,
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-01-01T00:00:05Z"
+            }
+          ]
+        })
+      );
+
+    render(<App pollingIntervalMs={1000} />);
+
+    await user.click(screen.getByRole("radio", { name: /merge pdfs/i }));
+    await user.upload(
+      screen.getByLabelText("First PDF"),
+      new File(["first"], "first.pdf", { type: "application/pdf" })
+    );
+    await user.upload(
+      screen.getByLabelText("Second PDF"),
+      new File(["second"], "second.pdf", { type: "application/pdf" })
+    );
+    await user.click(screen.getByRole("button", { name: /upload and create task/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(5));
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://localhost:8000/tasks?limit=10");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("http://localhost:8000/uploads");
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("http://localhost:8000/uploads");
+    expect(fetchMock.mock.calls[3]?.[0]).toBe("http://localhost:8000/tasks");
+
+    const taskRequest = fetchMock.mock.calls[3]?.[1];
+    expect(taskRequest?.method).toBe("POST");
+    expect(taskRequest?.body).toBe(
+      JSON.stringify({
+        task_type: "merge_pdfs",
+        payload: {
+          first_pdf_path: "uploads/tmp/up-1.pdf",
+          second_pdf_path: "uploads/tmp/up-2.pdf"
+        }
+      })
+    );
+  });
+
+  it("uploads one file before creating a summarize_pdf task", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.mocked(globalThis.fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(createJsonResponse({ tasks: [] }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ upload_id: "up-s-1", path: "uploads/tmp/up-s-1.pdf", filename: "report.pdf" }),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ task_id: "task-summary-1", status: "PENDING" }), {
+          status: 202,
+          headers: { "Content-Type": "application/json" }
+        })
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          tasks: [
+            {
+              id: "task-summary-1",
+              type: "summarize_pdf",
+              status: "COMPLETED",
+              payload: { pdf_path: "uploads/tasks/task-summary-1/input.pdf" },
+              result: { output_path: "outputs/task-summary-1/output.pdf", summary_model: "openrouter/free" },
+              error_message: null,
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-01-01T00:00:05Z"
+            }
+          ]
+        })
+      );
+
+    render(<App pollingIntervalMs={1000} />);
+
+    await user.click(screen.getByRole("radio", { name: /summarize pdf/i }));
+    await user.upload(
+      screen.getByLabelText("PDF File"),
+      new File(["report"], "report.pdf", { type: "application/pdf" })
+    );
+    await user.click(screen.getByRole("button", { name: /upload and create task/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("http://localhost:8000/uploads");
+    expect(fetchMock.mock.calls[2]?.[0]).toBe("http://localhost:8000/tasks");
+    expect(fetchMock.mock.calls[2]?.[1]?.body).toBe(
+      JSON.stringify({
+        task_type: "summarize_pdf",
+        payload: {
+          pdf_path: "uploads/tmp/up-s-1.pdf"
+        }
+      })
+    );
+  });
+
   it("shows a new task immediately before the backend list catches up", async () => {
     const user = userEvent.setup();
     const fetchMock = vi.mocked(globalThis.fetch);
@@ -175,6 +328,123 @@ describe("App", () => {
       "http://localhost:8000/artifacts/outputs/task-2/output.png"
     );
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("renders a completed merged pdf task in the recent activity feed", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.mocked(globalThis.fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(createJsonResponse({ tasks: [] }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ upload_id: "up-1", path: "uploads/tmp/up-1.pdf", filename: "first.pdf" }),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ upload_id: "up-2", path: "uploads/tmp/up-2.pdf", filename: "second.pdf" }),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" }
+          }
+        )
+      )
+      .mockResolvedValueOnce(createJsonResponse({ task_id: "task-merge", status: "PENDING" }, 202))
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          tasks: [
+            {
+              id: "task-merge",
+              type: "merge_pdfs",
+              status: "COMPLETED",
+              payload: {
+                first_pdf_path: "uploads/tasks/task-merge/input-1.pdf",
+                second_pdf_path: "uploads/tasks/task-merge/input-2.pdf"
+              },
+              result: { output_path: "outputs/task-merge/output.pdf", page_count: 7 },
+              error_message: null,
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-01-01T00:00:02Z"
+            }
+          ]
+        })
+      );
+
+    render(<App pollingIntervalMs={1000} />);
+
+    await user.click(screen.getByRole("radio", { name: /merge pdfs/i }));
+    await user.upload(
+      screen.getByLabelText("First PDF"),
+      new File(["first"], "first.pdf", { type: "application/pdf" })
+    );
+    await user.upload(
+      screen.getByLabelText("Second PDF"),
+      new File(["second"], "second.pdf", { type: "application/pdf" })
+    );
+
+    await user.click(screen.getByRole("button", { name: /upload and create task/i }));
+
+    await waitFor(() => expect(screen.getByText("COMPLETED")).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: "Download merged PDF" })).toHaveAttribute(
+      "href",
+      "http://localhost:8000/artifacts/outputs/task-merge/output.pdf"
+    );
+  });
+
+  it("renders a completed summary pdf task in the recent activity feed", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.mocked(globalThis.fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(createJsonResponse({ tasks: [] }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ upload_id: "up-3", path: "uploads/tmp/up-3.pdf", filename: "report.pdf" }),
+          {
+            status: 201,
+            headers: { "Content-Type": "application/json" }
+          }
+        )
+      )
+      .mockResolvedValueOnce(createJsonResponse({ task_id: "task-summary", status: "PENDING" }, 202))
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          tasks: [
+            {
+              id: "task-summary",
+              type: "summarize_pdf",
+              status: "COMPLETED",
+              payload: {
+                pdf_path: "uploads/tasks/task-summary/input.pdf"
+              },
+              result: { output_path: "outputs/task-summary/output.pdf", summary_model: "openrouter/free" },
+              error_message: null,
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-01-01T00:00:02Z"
+            }
+          ]
+        })
+      );
+
+    render(<App pollingIntervalMs={1000} />);
+
+    await user.click(screen.getByRole("radio", { name: /summarize pdf/i }));
+    await user.upload(
+      screen.getByLabelText("PDF File"),
+      new File(["report"], "report.pdf", { type: "application/pdf" })
+    );
+    await user.click(screen.getByRole("button", { name: /upload and create task/i }));
+
+    await waitFor(() => expect(screen.getByText("COMPLETED")).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: "Download summary PDF" })).toHaveAttribute(
+      "href",
+      "http://localhost:8000/artifacts/outputs/task-summary/output.pdf"
+    );
   });
 
   it("keeps polling while at least one recent task is not completed", async () => {

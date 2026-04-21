@@ -4,6 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from PIL import Image
+from pypdf import PdfReader, PdfWriter
 
 from app.db.repositories.task_repository import TaskRepository
 from app.schemas import TaskStatus, TaskType
@@ -89,3 +90,120 @@ def test_execute_resize_image_writes_output(
     assert output_path.exists()
     with Image.open(output_path) as output_image:
         assert output_image.size == (4, 6)
+
+
+def test_execute_merge_pdfs_writes_output(
+    repository: TaskRepository,
+    task_executor: TaskExecutor,
+    storage_root: Path,
+) -> None:
+    task_id = uuid4()
+    first_input_relative_path = "uploads/tasks/sample/input-1.pdf"
+    second_input_relative_path = "uploads/tasks/sample/input-2.pdf"
+    first_input_path = storage_root / first_input_relative_path
+    second_input_path = storage_root / second_input_relative_path
+    first_input_path.parent.mkdir(parents=True, exist_ok=True)
+
+    first_writer = PdfWriter()
+    first_writer.add_blank_page(width=72, height=72)
+    with first_input_path.open("wb") as first_file:
+        first_writer.write(first_file)
+
+    second_writer = PdfWriter()
+    second_writer.add_blank_page(width=144, height=144)
+    second_writer.add_blank_page(width=216, height=216)
+    with second_input_path.open("wb") as second_file:
+        second_writer.write(second_file)
+
+    repository.create_task(
+        task_id=task_id,
+        task_type=TaskType.MERGE_PDFS,
+        status=TaskStatus.PENDING,
+        payload={
+            "first_pdf_path": first_input_relative_path,
+            "second_pdf_path": second_input_relative_path,
+        },
+    )
+    repository.save()
+
+    success = task_executor.execute(task_id, TaskType.MERGE_PDFS)
+
+    db_task = repository.get_task_by_id(task_id)
+
+    assert success is True
+    assert db_task is not None
+    assert db_task.status == TaskStatus.COMPLETED.value
+    assert db_task.result is not None
+    assert db_task.result["page_count"] == 3
+
+    output_path = storage_root / db_task.result["output_path"]
+    assert output_path.exists()
+    with output_path.open("rb") as output_file:
+        reader = PdfReader(output_file)
+        assert len(reader.pages) == 3
+        assert float(reader.pages[0].mediabox.width) == 72
+        assert float(reader.pages[1].mediabox.width) == 144
+        assert float(reader.pages[2].mediabox.width) == 216
+
+
+def test_execute_summarize_pdf_writes_output(
+    repository: TaskRepository,
+    task_executor: TaskExecutor,
+    storage_root: Path,
+) -> None:
+    task_id = uuid4()
+    input_relative_path = "uploads/tasks/sample/input.pdf"
+    input_path = storage_root / input_relative_path
+    input_path.parent.mkdir(parents=True, exist_ok=True)
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=144, height=144)
+    writer.add_metadata({"/Title": "Quarterly Report"})
+    with input_path.open("wb") as input_file:
+        writer.write(input_file)
+
+    # Add extractable text by appending a second PDF that contains text-like metadata
+    # is not enough, so use page contents from pypdf-free tests via simple writer output
+    # and rely on the fake summary service through monkeypatching the extractor path.
+    repository.create_task(
+        task_id=task_id,
+        task_type=TaskType.SUMMARIZE_PDF,
+        status=TaskStatus.PENDING,
+        payload={
+            "pdf_path": input_relative_path,
+        },
+    )
+    repository.save()
+
+    from app.handlers import summarize_pdf as summarize_pdf_handler
+
+    original_reader = summarize_pdf_handler.PdfReader
+
+    class StubPage:
+        def extract_text(self) -> str:
+            return "Revenue increased and customer retention improved."
+
+    class StubReader:
+        def __init__(self, path: str) -> None:
+            self.pages = [StubPage(), StubPage()]
+
+    summarize_pdf_handler.PdfReader = StubReader
+    try:
+        success = task_executor.execute(task_id, TaskType.SUMMARIZE_PDF)
+    finally:
+        summarize_pdf_handler.PdfReader = original_reader
+
+    db_task = repository.get_task_by_id(task_id)
+
+    assert success is True
+    assert db_task is not None
+    assert db_task.status == TaskStatus.COMPLETED.value
+    assert db_task.result is not None
+    assert db_task.result["page_count"] == 2
+    assert db_task.result["summary_model"] == "openrouter/free"
+
+    output_path = storage_root / db_task.result["output_path"]
+    assert output_path.exists()
+    with output_path.open("rb") as output_file:
+        reader = PdfReader(output_file)
+        assert len(reader.pages) >= 1

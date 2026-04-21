@@ -6,10 +6,13 @@ from uuid import UUID
 from sqlalchemy.orm import sessionmaker
 
 from app.db.repositories.task_repository import TaskRepository
+from app.handlers.merge_pdfs import handle_merge_pdfs
 from app.handlers.resize_image import handle_resize_image
 from app.handlers.send_email import handle_send_email
+from app.handlers.summarize_pdf import handle_summarize_pdf
 from app.schemas import PAYLOAD_TYPE_MAP, TaskType
 from app.services.email_sender import EmailSender
+from app.services.pdf_summary import PdfSummaryService
 from app.services.storage import StorageService
 
 logger = logging.getLogger(__name__)
@@ -21,11 +24,13 @@ class TaskExecutor:
         session_factory: sessionmaker,
         storage: StorageService,
         email_sender: EmailSender,
+        pdf_summary_service: PdfSummaryService,
         repository_type: type[TaskRepository] = TaskRepository,
     ) -> None:
         self.session_factory = session_factory
         self.storage = storage
         self.email_sender = email_sender
+        self.pdf_summary_service = pdf_summary_service
         self.repository_type = repository_type
 
     def execute(self, task_id: UUID, message_task_type: TaskType) -> bool:
@@ -54,6 +59,15 @@ class TaskExecutor:
                     result = handle_send_email(payload_model, self.email_sender)
                 elif task_type is TaskType.RESIZE_IMAGE:
                     result = handle_resize_image(task.id, payload_model, self.storage)
+                elif task_type is TaskType.MERGE_PDFS:
+                    result = handle_merge_pdfs(task.id, payload_model, self.storage)
+                elif task_type is TaskType.SUMMARIZE_PDF:
+                    result = handle_summarize_pdf(
+                        task.id,
+                        payload_model,
+                        self.storage,
+                        self.pdf_summary_service,
+                    )
                 else:
                     raise ValueError(f"Unsupported task type: {task_type.value}")
 
