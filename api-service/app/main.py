@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.dependencies import build_storage_service
 from app.api.middleware import rate_limit_middleware
 from app.core.config import Settings, get_settings
 from app.api.routes.artifacts import router as artifacts_router
@@ -19,12 +20,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
     publisher = RabbitMQPublisher(settings.rabbitmq_url)
     rate_limiter = build_rate_limiter(settings.redis_url, settings.rate_limit_prefix)
+    storage_service = build_storage_service(settings)
     await publisher.connect()
+    await storage_service.ensure_ready()
     app.state.publisher = publisher
     app.state.rate_limiter = rate_limiter
+    app.state.storage_service = storage_service
     try:
         yield
     finally:
+        await storage_service.close()
         await publisher.close()
         await rate_limiter.close()
 
@@ -43,6 +48,7 @@ def create_app(
     app.state.settings = resolved_settings
     app.state.publisher = publisher or getattr(app.state, "publisher", None)
     app.state.rate_limiter = rate_limiter or NoopRateLimiter()
+    app.state.storage_service = build_storage_service(resolved_settings)
     if resolved_settings.cors_allowed_origins:
         app.add_middleware(
             CORSMiddleware,

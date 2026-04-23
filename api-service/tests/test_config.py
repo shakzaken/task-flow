@@ -1,10 +1,9 @@
-from pathlib import Path
-
 from app.core.config import Settings
 
 
-def test_local_storage_path_defaults_to_repo_shared_data() -> None:
+def test_s3_settings_have_reasonable_defaults() -> None:
     settings = Settings(_env_file=None)
 
-    expected_path = Path(__file__).resolve().parents[2] / "shared-data"
-    assert settings.local_storage_path == expected_path
+    assert settings.s3_bucket == "task-flow"
+    assert settings.s3_region == "us-east-1"
+    assert settings.s3_auto_create_bucket is False

@@ -19,33 +19,35 @@ def handle_summarize_pdf(
     storage: StorageService,
     pdf_summary_service: PdfSummaryService,
 ) -> dict[str, int | str]:
-    input_path = storage.resolve_relative_path(payload.pdf_path)
-    if not input_path.is_file():
-        raise FileNotFoundError(f"Input PDF does not exist: {payload.pdf_path}")
+    with storage.task_workspace(task_id) as workspace:
+        try:
+            input_path = storage.download_to_path(payload.pdf_path, workspace / "input.pdf")
+        except FileNotFoundError as exc:
+            raise FileNotFoundError(f"Input PDF does not exist: {payload.pdf_path}") from exc
 
-    reader = PdfReader(str(input_path))
-    extracted_pages = [(page.extract_text() or "").strip() for page in reader.pages]
-    document_text = "\n\n".join(text for text in extracted_pages if text)
-    if not document_text.strip():
-        raise RuntimeError("The PDF did not contain extractable text.")
+        reader = PdfReader(str(input_path))
+        extracted_pages = [(page.extract_text() or "").strip() for page in reader.pages]
+        document_text = "\n\n".join(text for text in extracted_pages if text)
+        if not document_text.strip():
+            raise RuntimeError("The PDF did not contain extractable text.")
 
-    summary_result = pdf_summary_service.summarize_document(document_text)
-    summary_text = summary_result["summary"]
+        summary_result = pdf_summary_service.summarize_document(document_text)
+        summary_text = summary_result["summary"]
 
-    output_relative_path = storage.build_output_relative_path(task_id, payload.pdf_path)
-    output_path = storage.resolve_relative_path(output_relative_path)
-    storage.ensure_parent_directory(output_path)
-    _write_summary_pdf(
-        output_path=output_path,
-        title=input_path.name,
-        summary_text=summary_text,
-    )
+        output_relative_path = storage.build_output_relative_path(task_id, payload.pdf_path)
+        output_path = workspace / "output.pdf"
+        _write_summary_pdf(
+            output_path=output_path,
+            title=input_path.name,
+            summary_text=summary_text,
+        )
+        storage.upload_file(output_path, output_relative_path, content_type="application/pdf")
 
-    return {
-        "output_path": output_relative_path,
-        "page_count": len(reader.pages),
-        "summary_model": summary_result["model"],
-    }
+        return {
+            "output_path": output_relative_path,
+            "page_count": len(reader.pages),
+            "summary_model": summary_result["model"],
+        }
 
 
 def _write_summary_pdf(output_path: Path, title: str, summary_text: str) -> None:
