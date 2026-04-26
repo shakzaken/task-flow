@@ -1,40 +1,55 @@
 # Task Flow
 
-Task Flow is an asynchronous task-processing application built around a FastAPI `api-service` and a React/Vite `frontend-service`. The API accepts task creation and upload requests, persists task state in PostgreSQL, publishes background work to RabbitMQ, and serves task status for the UI, while the frontend submits `send_email` and `resize_image` jobs and polls for status updates. The wider project design also includes Redis for coordination and a `worker-service` for background execution, with shared filesystem storage for file-based task inputs and outputs.
+Task Flow is an asynchronous task-processing application built around a FastAPI `api-service`, a background `worker-service`, and a React/Vite `frontend-service`. The API accepts task creation and upload requests, persists task state in PostgreSQL, publishes background work to RabbitMQ, and serves task status for the UI. The worker executes background tasks and stores file inputs/outputs in S3-compatible object storage. Local development uses MinIO for object storage.
 
-Before running the application, create the `task_flow` PostgreSQL database in Postgres.
+## Main Local Workflow
 
-Configure each service with its own `.env` file before starting the services:
+The main local workflow now runs the full stack with Docker Compose.
+
+Docker-specific env files:
+
+- `api-service/.env.docker`
+- `worker-service/.env.docker`
+
+Start the full stack from the repo root:
+
+```bash
+docker compose up --build
+```
+
+Main endpoints:
+
+- App and API: `http://localhost:8000`
+- Worker health: `http://localhost:8001/health`
+- RabbitMQ management: `http://localhost:15672`
+- MinIO console: `http://localhost:9001`
+
+The Compose stack includes:
+
+- PostgreSQL
+- Redis
+- RabbitMQ
+- MinIO
+- `api-migrate`
+- `api-service`
+- `worker-service`
+
+To stop and remove the disposable local data:
+
+```bash
+docker compose down -v
+```
+
+## Non-Docker Local Workflow
+
+If you want to run services directly on your machine instead of Docker, use the service-local `.env` files:
 
 - `api-service/.env`
 - `worker-service/.env`
 - `frontend-service/.env`
 
-The API and worker should use the same S3-compatible storage settings. For local development, point both of them at MinIO.
-
-Then start the local infrastructure expected by those service env files:
-
-- PostgreSQL
-- RabbitMQ
-- Redis
-
-Run the API service in one terminal:
+To build the frontend into the API service for a single deployable HTTP service, run from the repo root:
 
 ```bash
-cd api-service
-UV_CACHE_DIR=.uv-cache uv sync --dev
-uv run alembic upgrade head
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+./scripts/build_frontend_for_api.sh
 ```
-
-Run the frontend service in another terminal:
-
-```bash
-cd frontend-service
-npm install
-npm run dev
-```
-
-The frontend uses `http://localhost:8000` by default through `VITE_API_BASE_URL`.
-
-The project docs also describe a `worker-service` as part of the target architecture, but that service directory is not present in this checkout.

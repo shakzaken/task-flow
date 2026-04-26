@@ -24,6 +24,7 @@ node_modules/
 dist/
 build/
 .vite/
+api-service/app/static/
 
 *.log
 
