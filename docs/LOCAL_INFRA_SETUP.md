@@ -1,18 +1,33 @@
 # Local Infrastructure Setup
 
-This document explains how to run PostgreSQL, RabbitMQ, Redis, and MinIO locally for this project.
+This document explains the Docker Compose local stack for this project. It runs PostgreSQL, RabbitMQ, Redis, MinIO, the migration job, the API service, and the worker service together.
 
-The connection values used by the project now live in service-specific env files:
+The Docker Compose stack uses:
 
-- `api-service/.env`
-- `worker-service/.env`
-- `frontend-service/.env`
+- `api-service/.env.docker`
+- `worker-service/.env.docker`
 
 ---
 
-## Current Connection Values
+## Main Command
 
-Recommended local values across the service env files:
+Start the full local stack from the repo root:
+
+```bash
+docker compose up --build
+```
+
+Stop it and remove disposable data:
+
+```bash
+docker compose down -v
+```
+
+---
+
+## Docker Connection Values
+
+Recommended local values across the Docker env files:
 
 - PostgreSQL host: `localhost`
 - PostgreSQL port: `5432`
@@ -31,141 +46,59 @@ Recommended local values across the service env files:
 
 ---
 
-## Start PostgreSQL With Brew
+## Exposed Ports
 
-If you installed PostgreSQL with Homebrew, the exact formula name may be versioned, for example `postgresql@16`.
-
-Check the installed service name:
-
-```bash
-brew services list
-```
-
-Start PostgreSQL:
-
-```bash
-brew services start <your-postgres-formula>
-```
-
-Examples:
-
-```bash
-brew services start postgresql@16
-brew services start postgresql@15
-```
-
-Verify it is running:
-
-```bash
-brew services list
-pg_isready -h localhost -p 5432
-```
+- App and API: `8000`
+- Worker health: `8001`
+- PostgreSQL: `5432`
+- RabbitMQ: `5672`
+- RabbitMQ management: `15672`
+- Redis: `6379`
+- MinIO API: `9000`
+- MinIO console: `9001`
 
 ---
 
-## Create The PostgreSQL User And Database
+## Docker Services
 
-The local service env files assume this database setup:
+The stack includes these services:
 
-- database: `task_flow`
-- user: `yakir`
-- password: empty
+- `postgres`
+- `redis`
+- `rabbitmq`
+- `minio`
+- `api-migrate`
+- `api-service`
+- `worker-service`
 
-One simple way to create them:
-
-```bash
-psql postgres
-```
-
-Then run:
-
-```sql
-CREATE DATABASE task_flow OWNER yakir;
-```
-
-Exit with:
-
-```sql
-\q
-```
-
-If you change these values, update both `api-service/.env` and `worker-service/.env` to match.
+`api-migrate` runs Alembic migrations before the API and worker start.
 
 ---
 
-## Start RabbitMQ With Brew
+## Docker Env Files
 
-Start RabbitMQ:
+The Docker stack does not use the normal local `.env` files. It uses:
 
-```bash
-brew services start rabbitmq
-```
+- `api-service/.env.docker`
+- `worker-service/.env.docker`
 
-Verify it is running:
-
-```bash
-brew services list
-```
-
-The local service env files expect:
-
-- host: `localhost`
-- port: `5672`
-- username: `guest`
-- password: `guest`
-
-That matches the default local RabbitMQ setup in many Homebrew installs.
+These use Docker service names such as `postgres`, `redis`, `rabbitmq`, and `minio` instead of `localhost`.
 
 ---
 
-## Start Redis With Brew
+## MinIO
 
-Start Redis:
+MinIO is included in the main Compose stack, so you do not need the separate MinIO-only Compose file for the main local workflow.
 
-```bash
-brew services start redis
-```
-
-Verify it is running:
-
-```bash
-brew services list
-redis-cli ping
-```
-
-The local service env files expect:
-
-- Redis URL: `redis://localhost:6379/0`
-- host: `localhost`
-- port: `6379`
-- database: `0`
-
-If `redis-cli ping` returns `PONG`, Redis is running and reachable on the expected local address.
-
----
-
-## Start MinIO With Docker
-
-The app now uses S3-compatible object storage instead of the shared local filesystem. For local development, run MinIO:
-
-```bash
-docker compose -f docker-compose.minio.yml up -d
-```
-
-This starts:
-
-- S3 API on `http://localhost:9000`
-- MinIO console on `http://localhost:9001`
-
-Default local credentials in [docker-compose.minio.yml](/Users/yakir/projects/claude/task-flow/docker-compose.minio.yml):
+Default local credentials in Docker:
 
 - access key: `minioadmin`
 - secret key: `minioadmin`
 
-Recommended values for both `api-service/.env` and `worker-service/.env` for local object storage:
+The API and worker use these Docker-local object storage values:
 
 ```env
-S3_ENDPOINT=http://localhost:9000
+S3_ENDPOINT=http://minio:9000
 S3_REGION=us-east-1
 S3_BUCKET=task-flow
 S3_ACCESS_KEY_ID=minioadmin
@@ -179,38 +112,24 @@ The services can auto-create the local bucket on startup when `S3_AUTO_CREATE_BU
 
 ---
 
-## Stop Services
+## UI
 
-Stop PostgreSQL:
+The Docker local workflow serves the built UI from `api-service`. Open:
 
-```bash
-brew services stop <your-postgres-formula>
+```text
+http://localhost:8000
 ```
 
-Stop RabbitMQ:
-
-```bash
-brew services stop rabbitmq
-```
-
-Stop Redis:
-
-```bash
-brew services stop redis
-```
-
-Stop MinIO:
-
-```bash
-docker compose -f docker-compose.minio.yml down
-```
+The standalone `frontend-service` dev server is no longer the main local workflow.
 
 ---
 
-## Notes
+## Alternative Manual Setup
 
-- `api-service` and `worker-service` should each read from their own `.env` file.
-- Redis connection values should be set in both `api-service/.env` and `worker-service/.env` when both services need them.
-- `api-service` and `worker-service` should use the same S3-compatible storage settings in their own `.env` files.
-- If you later move these services into separate Docker containers, keep the service-specific environment values aligned with the same connection contract.
-- Local development now uses MinIO as the object storage backend instead of a shared filesystem path.
+If you want to run infrastructure manually with Homebrew instead, you can still do that, but Docker Compose is now the recommended path.
+
+Check the installed PostgreSQL service name:
+
+```bash
+brew services list
+```

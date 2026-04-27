@@ -55,13 +55,18 @@ class StorageService:
             create_args: dict[str, object] = {"Bucket": self.bucket}
             if self.region != "us-east-1":
                 create_args["CreateBucketConfiguration"] = {"LocationConstraint": self.region}
-            self.client.create_bucket(**create_args)
+            try:
+                self.client.create_bucket(**create_args)
+            except ClientError as create_exc:
+                if self._error_code(create_exc) not in {"BucketAlreadyExists", "BucketAlreadyOwnedByYou"}:
+                    raise
 
     def close(self) -> None:
         self.client.close()
 
     @contextmanager
     def task_workspace(self, task_id: UUID):
+        self.work_root.mkdir(parents=True, exist_ok=True)
         workspace = Path(tempfile.mkdtemp(prefix=f"{task_id}-", dir=self.work_root))
         try:
             yield workspace
@@ -105,4 +110,3 @@ class StorageService:
     @staticmethod
     def _error_code(exc: ClientError) -> str:
         return str(exc.response.get("Error", {}).get("Code", ""))
-

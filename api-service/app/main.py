@@ -8,6 +8,7 @@ from app.api.dependencies import build_storage_service
 from app.api.middleware import rate_limit_middleware
 from app.core.config import Settings, get_settings
 from app.api.routes.artifacts import router as artifacts_router
+from app.api.routes.frontend import DEFAULT_STATIC_DIR, router as frontend_router
 from app.api.routes.health import router as health_router
 from app.api.routes.tasks import router as tasks_router
 from app.api.routes.uploads import router as uploads_router
@@ -49,6 +50,7 @@ def create_app(
     app.state.publisher = publisher or getattr(app.state, "publisher", None)
     app.state.rate_limiter = rate_limiter or NoopRateLimiter()
     app.state.storage_service = build_storage_service(resolved_settings)
+    app.state.frontend_static_dir = DEFAULT_STATIC_DIR
     if resolved_settings.cors_allowed_origins:
         app.add_middleware(
             CORSMiddleware,
@@ -63,6 +65,7 @@ def create_app(
     app.include_router(artifacts_router)
     app.include_router(tasks_router)
     app.include_router(uploads_router)
+    app.include_router(frontend_router)
     return app
 
 
