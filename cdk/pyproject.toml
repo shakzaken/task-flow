@@ -1,0 +1,9 @@
+[project]
+name = "task-flow-cdk"
+version = "0.1.0"
+description = "AWS CDK project for task-flow"
+requires-python = ">=3.13"
+dependencies = [
+    "aws-cdk-lib>=2,<3",
+    "constructs>=10,<11",
+]

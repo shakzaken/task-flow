@@ -2,213 +2,272 @@
 
 ## Goal
 
-Create an AWS CDK project in Python that deploys this application to AWS with a low-cost ECS on EC2 architecture.
+Create one AWS CDK project in Python that deploys the app to AWS with a cost-first ECS on EC2 architecture.
 
-This plan follows the current decisions:
+This document reflects the current decisions:
 
-- Use AWS CDK in Python
-- Use ECS with the EC2 launch type
-- Use 5 EC2 instances
-- Use S3 for file/object storage
-- Do not use CloudFront
-- Keep PostgreSQL, Redis, and RabbitMQ on ECS tasks instead of managed AWS database/cache/message services
-- Use one primary service per EC2 instance
-- Create and push ECR images manually outside CDK
-- Initially serve the frontend through `api-service`
-- Keep both local filesystem storage and S3 storage supported
-- Use environment variables for secrets in ECS task definitions
-- Keep RabbitMQ as RabbitMQ
+- one CDK app
+- one stack: `TaskFlowStack`
+- one ECS cluster
+- one EC2 Auto Scaling Group with `5` `t3.small` instances
+- ECS on EC2 launch type
+- soft placement, not strict dedicated-instance placement
+- `api-service` is the only public entrypoint
+- `worker-service`, `postgres`, `redis`, and `rabbitmq` run as ECS services on EC2
+- frontend is served by `api-service`
+- AWS uses `S3`, not MinIO
+- CDK creates the S3 bucket
+- ECR repositories are created manually, outside CDK
+- CDK reads deployment config from a local ignored `.env.cdk` file
+- first version uses HTTP only, no Route53, ACM, or CloudFront
 
-## Planned AWS Architecture
+## Target Architecture
 
-### Compute
+### Public traffic
 
-- 1 ECS cluster
-- 1 Auto Scaling Group with 5 EC2 instances
-- 1 capacity provider connected to the ECS cluster
-- ECS tasks scheduled onto those 5 instances
+- Browser -> ALB -> `api-service`
+- `api-service` serves:
+  - frontend static files
+  - backend API routes
+  - artifact download routes
 
-### Application services
+### Internal traffic
+
+- `api-service` -> `postgres`
+- `api-service` -> `redis`
+- `api-service` -> `rabbitmq`
+- `api-service` -> `S3`
+- `worker-service` -> `postgres`
+- `worker-service` -> `rabbitmq`
+- `worker-service` -> `S3`
+- `worker-service` -> external APIs such as Resend and OpenRouter
+
+### ECS services
 
 - `api-service`
-  - ECS service
-  - Internet-facing through an ALB
-  - Initially also serves the built frontend assets
 - `worker-service`
-  - ECS service
-  - No public ingress
 - `postgres`
-  - ECS service or ECS task with persistent EBS-backed storage strategy
 - `redis`
-  - ECS service
 - `rabbitmq`
-  - ECS service
 
-### Frontend delivery decision
+### AWS resources
 
-Initial plan:
+- `1` VPC
+- public subnets for the ALB
+- public workload subnets for ECS EC2 instances
+- `1` ECS cluster
+- `1` Auto Scaling Group with `5 x t3.small`
+- `1` internet-facing ALB
+- `1` S3 bucket for uploads and outputs
+- security groups
+- CloudWatch log groups
+- IAM roles and instance profile for ECS and S3 access
 
-- do not run `frontend-service` as a separate public runtime service in AWS
-- build the frontend statically
-- package the built frontend with `api-service` and serve it from the API container
+## Placement Strategy
 
-Later option:
+We are using **soft placement**.
 
-- move frontend hosting to S3
-- optionally add CloudFront later if needed
+That means:
 
-### Storage
+- the cluster has `5` EC2 instances
+- ECS is allowed to place tasks wherever capacity exists
+- we size and configure services so the intended layout is roughly one primary service per instance
+- we do not add hard placement rules that pin one specific service to one specific machine
 
-- S3 bucket for uploaded files and generated artifacts
-- EBS volumes for stateful container workloads that need persistence:
-  - PostgreSQL
-  - RabbitMQ
-  - potentially Redis if persistence is enabled
+Why this choice:
 
-### Networking
+- simpler CDK
+- easier recovery if an instance dies
+- more flexible than strict placement
+- still close to the desired low-cost layout
 
-- 1 VPC
-- public subnets for ALB
-- private subnets for ECS instances if possible
-- security groups for:
-  - ALB
-  - ECS instances
-  - internal service-to-service traffic
+## Service Layout Assumption
 
-### Access path
+The intended runtime shape is:
 
-- Browser -> ALB -> `api-service` for both frontend assets and API routes
-- `api-service` -> RabbitMQ
-- `worker-service` -> RabbitMQ
-- `api-service` / `worker-service` -> PostgreSQL
-- `api-service` / `worker-service` -> Redis
-- `api-service` / `worker-service` -> S3
+1. `api-service`
+2. `worker-service`
+3. `postgres`
+4. `redis`
+5. `rabbitmq`
+
+This is an intended capacity model, not a strict scheduler rule.
+
+## Image Strategy
+
+CDK will not create ECR repositories.
+
+Manual ECR repositories:
+
+- `task-flow-api`
+- `task-flow-worker`
+
+Image tagging recommendation:
+
+- deploy with immutable git SHA tags
+- optionally also push `latest` for convenience
+
+For AWS deployment:
+
+- `api-service` uses image from `task-flow-api`
+- `worker-service` uses image from `task-flow-worker`
+- `postgres`, `redis`, and `rabbitmq` can use public upstream images unless we later decide to mirror them into ECR
+
+## Configuration Strategy
+
+### Local CDK config file
+
+CDK reads deployment values from:
+
+- `.env.cdk`
+
+This file must be:
+
+- local only
+- added to `.gitignore`
+- not committed
+
+We should also keep:
+
+- `.env.cdk.example`
+
+with placeholder values and documentation comments.
+
+### What goes into `.env.cdk`
+
+Non-secret config examples:
+
+- AWS region
+- stack name override if needed
+- ECR image tags
+- container ports
+- database name
+- database user
+- S3 bucket name
+- OpenRouter model
+- worker concurrency
+
+Secret config examples:
+
+- `POSTGRES_PASSWORD`
+- `RESEND_API_KEY`
+- `OPENROUTER_API_KEY`
+- `RABBITMQ_DEFAULT_USER`
+- `RABBITMQ_DEFAULT_PASS`
+
+### Important note
+
+For this first version, `.env.cdk` is acceptable and simple.
+
+Later, we may want to move real secrets into:
+
+- AWS Secrets Manager
+- or SSM Parameter Store
+
+But that is not required for the first CDK version.
 
 ## CDK Project Structure
 
-Planned CDK app layout:
+Recommended structure:
 
 ```text
-infrastructure/
+cdk/
   app.py
   cdk.json
   requirements.txt
-  stacks/
-    network_stack.py
-    storage_stack.py
-    cluster_stack.py
-    service_stack.py
-    observability_stack.py
-  constructs/
-    ecs_service.py
-    ecs_stateful_service.py
-    security.py
-    task_definition_factory.py
+  .env.cdk.example
+  config_loader.py
+  task_flow_stack.py
+  cdk_constructs/
+    network.py
+    storage.py
+    observability.py
+    cluster.py
+    discovery.py
+    load_balancer.py
+    services.py
 ```
 
-## Stack Plan
+We are using one stack, but helper constructs are still useful for keeping the code readable.
 
-### 1. `NetworkStack`
+## What `TaskFlowStack` Should Create
 
-Creates:
+### 1. VPC and networking
 
-- VPC
-- subnets
-- internet gateway / route tables
-- security groups
-- ALB
+- VPC across at least 2 Availability Zones
+- public subnets for ALB
+- public workload subnets for ECS EC2 instances
+- internet gateway
+- route tables
 
-Responsibilities:
+We should avoid NAT Gateway for now to keep costs low.
 
-- expose HTTP entry points
-- isolate internal services
-- define allowed ports:
-  - frontend
-  - api
-  - postgres
-  - redis
-  - rabbitmq
+For the first low-cost version, the practical choice is:
 
-### 2. `StorageStack`
+- ALB in public subnets
+- ECS EC2 instances in public workload subnets with controlled security groups
+- `api-service` exposed only through the ALB
+- `worker-service`, `postgres`, `redis`, and `rabbitmq` kept internal by security-group exposure
 
-Creates:
+This is not the most production-hardened design, but it is simpler and cheaper than introducing NAT Gateways.
 
-- S3 bucket for app uploads and outputs
-- optional bucket policies
-- optional lifecycle rules
+### 2. Security groups
 
-Responsibilities:
+At minimum:
 
-- hold uploaded files
-- hold generated files such as resized images, merged PDFs, and summarized PDFs
+- ALB security group
+- ECS instance security group
 
-### 3. `ClusterStack`
+Allowed traffic:
 
-Creates:
+- internet -> ALB on `80`
+- ALB -> `api-service`
+- ECS internal traffic for:
+  - `postgres`
+  - `redis`
+  - `rabbitmq`
+- outbound internet for:
+  - S3 access
+  - package/service APIs such as Resend and OpenRouter
+
+### 3. ECS cluster and EC2 capacity
 
 - ECS cluster
-- Auto Scaling Group with 5 EC2 instances
-- ECS capacity provider
-- instance profile / IAM role
-- ECS-optimized AMI selection
+- Auto Scaling Group with:
+  - desired capacity `5`
+  - min capacity `5`
+  - max capacity `5`
+  - instance type `t3.small`
+- ECS-optimized AMI
+- capacity provider attached to the cluster
+- IAM instance role/profile for ECS EC2 instances
 
-Responsibilities:
+The EC2 instance role should include what is needed for:
 
-- provide the 5 EC2 instances used by all ECS services
-- install ECS agent through the standard ECS-optimized AMI path
+- ECS agent
+- CloudWatch logs
+- S3 object access for app containers if accessed through instance role or task role
 
-Initial assumption:
+### 4. S3 bucket
 
-- Use `t3.small` for all 5 ECS EC2 instances
+One private S3 bucket for:
 
-### 4. `ServiceStack`
+- `uploads/tmp/...`
+- `uploads/tasks/...`
+- `outputs/...`
 
-Creates task definitions and ECS services for:
+Recommended settings:
 
-- `api-service`
-- `worker-service`
-- `postgres`
-- `redis`
-- `rabbitmq`
+- private bucket
+- block public access
+- versioning optional
+- lifecycle rules optional for later
 
-Responsibilities:
+Bucket name can come from `.env.cdk`, or CDK can generate one and expose it as an output. Since the app expects env-driven config, using `.env.cdk` for the bucket name is fine.
 
-- environment variables
-- task roles
-- log groups
-- port mappings
-- service discovery or internal DNS usage
-- ALB target groups for API and frontend asset delivery through `api-service`
+### 5. CloudWatch log groups
 
-### 5. `ObservabilityStack`
-
-Creates:
-
-- CloudWatch log groups
-- alarms for instance health
-- alarms for ALB target health
-- optional CPU and memory alarms
-
-## ECS Placement Plan
-
-Target layout with 5 EC2 instances:
-
-1. Instance 1: `api-service`
-2. Instance 2: `worker-service`
-3. Instance 3: `postgres`
-4. Instance 4: `redis`
-5. Instance 5: `rabbitmq`
-
-This is the simplest mental model and matches the current 5-instance requirement while keeping one primary service per instance.
-
-Alternative later optimization:
-
-- pack multiple services onto fewer instances and keep spare capacity
-- but the initial CDK plan should assume one primary service per instance
-
-## Container Image Strategy
-
-The CDK project should expect Docker images for:
+Create log groups for:
 
 - `api-service`
 - `worker-service`
@@ -216,249 +275,208 @@ The CDK project should expect Docker images for:
 - `redis`
 - `rabbitmq`
 
-Planned image source:
+Recommended:
 
-- ECR repositories created manually outside CDK
-- images built and pushed manually or by CI/CD outside CDK
+- explicit retention period
+- predictable names
 
-CDK responsibility:
+### 6. Application Load Balancer
 
-- reference existing ECR repository names and tags
-- deploy ECS services using those images
+- internet-facing ALB
+- HTTP listener on port `80`
+- target group for `api-service`
+- health check path:
+  - `/health`
 
-## Configuration and Secrets
+The ALB only routes to `api-service`.
 
-Use:
+No public route is needed for:
 
-- ECS task environment variables for both non-secret config and secrets
+- `worker-service`
+- `postgres`
+- `redis`
+- `rabbitmq`
 
-Secrets to manage:
+### 7. ECS task definitions and services
 
-- PostgreSQL credentials
-- Redis password if enabled
-- RabbitMQ credentials
+#### `api-service`
+
+- ECS service
+- desired count `1`
+- registered in ALB target group
+- environment from `.env.cdk`
+- image from `task-flow-api:<tag>`
+
+Needs:
+
+- S3 bucket env vars
+- Postgres connection env vars
+- Redis connection env vars
+- RabbitMQ connection env vars
+
+#### `worker-service`
+
+- ECS service
+- desired count `1`
+- no public ingress
+- image from `task-flow-worker:<tag>`
+
+Needs:
+
+- S3 bucket env vars
+- Postgres connection env vars
+- RabbitMQ connection env vars
+- Resend/OpenRouter env vars
+- worker temp directory env var
+
+#### `postgres`
+
+- ECS service
+- desired count `1`
+- internal only
+
+We need to decide storage handling in implementation:
+
+- cheapest path: ephemeral container storage
+- better path: attach EBS-backed persistence
+
+For the first version, document clearly whether data is disposable or persistent.
+
+#### `redis`
+
+- ECS service
+- desired count `1`
+- internal only
+
+Can likely be treated as disposable in the first version.
+
+#### `rabbitmq`
+
+- ECS service
+- desired count `1`
+- internal only
+
+Also needs credentials from `.env.cdk`.
+
+## Service Discovery / Internal Addressing
+
+The app needs stable internal hostnames for:
+
+- `postgres`
+- `redis`
+- `rabbitmq`
+
+Recommended first approach:
+
+- use ECS service discovery with AWS Cloud Map
+- or use fixed internal DNS/service naming supported by ECS networking choices
+
+This should be kept simple and explicit in implementation.
+
+## Environment Variable Plan
+
+### `api-service`
+
+Expected categories:
+
+- app port
+- database config
+- Redis config
+- RabbitMQ config
+- S3 config
+- rate limiting config
+
+### `worker-service`
+
+Expected categories:
+
+- app port
+- database config
+- RabbitMQ config
+- S3 config
+- worker runtime config
+- email config
+- OpenRouter config
+
+### Example values CDK should set
+
+- `POSTGRES_HOST`
+- `POSTGRES_PORT`
+- `POSTGRES_DB`
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `REDIS_URL`
+- `RABBITMQ_URL`
+- `S3_REGION`
+- `S3_BUCKET`
+- `AWS_REGION`
 - `RESEND_API_KEY`
 - `OPENROUTER_API_KEY`
-
-Non-secret config:
-
-- ports
-- bucket names
-- service URLs
-- `EMAIL_PROVIDER_MODE`
 - `OPENROUTER_MODEL`
-- `REDIS_URL`
-
-Important note:
-
-- this is simple and matches the current preference
-- it is less secure than using Secrets Manager or SSM Parameter Store
-- CDK should keep secret values configurable per environment and never hardcode them in source control
-
-Current decision:
-
-- all environment variables will be configured in CDK before deployment
-
-## Persistence Strategy
-
-### PostgreSQL
-
-Needs durable storage.
-
-Plan:
-
-- mount persistent storage to the Postgres container
-- if staying on ECS EC2, this is the riskiest stateful component
-
-Important note:
-
-- ECS on EC2 is not ideal for self-hosted PostgreSQL
-- this plan accepts that tradeoff to minimize AWS managed-service cost
-
-### Redis
-
-Plan:
-
-- start with non-critical persistence assumptions
-- can run without strong durability if used for cache/rate limiting
-
-### RabbitMQ
-
-Plan:
-
-- enable persistence if task durability matters
-- mount storage if message durability is required
-
-## Frontend Serving Plan
-
-Because the initial AWS deployment will serve the frontend through `api-service`, the application needs an app-level adjustment before or alongside CDK work.
-
-Planned changes:
-
-1. build the React frontend during image creation
-2. copy the frontend build output into the `api-service` image
-3. update `api-service` to serve static frontend assets
-4. keep API routes working under a predictable prefix such as `/api` if needed
-5. make client-side routing fall back to `index.html`
-
-This keeps the first AWS deployment simpler and avoids a separate frontend runtime service.
-
-Later migration path:
-
-- move static frontend hosting to S3
-- optionally add CloudFront later
-- keep `api-service` as API-only if desired
-
-## Storage Migration Plan: Local Filesystem And S3
-
-We also need a clear plan for migrating storage from the current local filesystem model to S3 without breaking local development.
-
-### Goal
-
-Support two storage modes:
-
-1. local filesystem mode for local development
-2. S3-backed mode for AWS deployment
-
-### Design approach
-
-Use the existing storage abstraction and extend it so the app can switch based on configuration.
-
-Planned model:
-
-- `STORAGE_MODE=local`
-  - existing local file behavior
-  - used in local development
-- `STORAGE_MODE=s3`
-  - uploads and generated artifacts stored in S3
-  - used in AWS
-
-### API-service changes
-
-The API service should support both implementations through the same interface:
-
-- store temporary uploads
-- attach uploads to task scope
-- generate artifact references
-- download artifact content
-
-Likely implementation:
-
-- keep current local storage service
-- add an S3 storage service
-- choose implementation based on settings
-
-### Worker-service changes
-
-The worker currently expects filesystem access for inputs and outputs.
-
-For S3 mode, the worker will need a local working directory plus S3 transfer steps:
-
-1. download task input objects from S3 to local temp disk
-2. process files locally
-3. upload outputs back to S3
-4. save S3-backed artifact references in task results
-
-This means the worker storage abstraction also needs a dual implementation or a hybrid local-workdir plus remote-storage model.
-
-### Recommended migration strategy
-
-Phase 1:
-
-- keep local mode unchanged
-- add S3 mode behind the same interface
-- make AWS use only S3 mode
-
-Phase 2:
-
-- verify all file-producing tasks work with S3:
-  - resize image
-  - merge PDFs
-  - summarize PDF
-
-Phase 3:
-
-- optionally remove assumptions in handlers that inputs are always on the shared local filesystem
-
-### CDK implications
-
-The CDK project should provision:
-
-- S3 bucket
-- IAM permissions for `api-service` and `worker-service`
-- environment variables required for S3 mode
-
-The CDK project should not assume local shared disk for cross-service file passing in AWS.
-
-## Load Balancer Plan
-
-Use one ALB that routes all application traffic to `api-service` initially.
-
-Within `api-service`:
-
-- API routes should remain under explicit API paths
-- frontend assets and SPA fallback should be served by the same container
-
-Later, if the frontend moves to S3, the routing model can be simplified again.
-
-## IAM Plan
-
-### ECS instance role
-
-Needs permissions for:
-
-- ECS cluster registration
-- CloudWatch logs
-- pulling images from ECR
-
-### Task roles
-
-`api-service` task role:
-
-- S3 read/write
-
-`worker-service` task role:
-
-- S3 read/write
-
-## Deployment Order
-
-Recommended deployment flow:
-
-1. Adjust `api-service` to serve frontend assets
-2. Extend storage abstraction to support both local and S3 modes
-3. Deploy network stack
-4. Deploy storage stack
-5. Deploy cluster stack
-6. Build and push container images
-7. Deploy service stack
-8. Deploy observability stack
-
-## Open Questions To Resolve During CDK Implementation
-
-These are the main decisions still worth confirming:
-
-No open questions remain at the planning level for the initial CDK document.
-
-## Recommendation
-
-For the first CDK version:
-
-- keep the project modular
-- model the 5-instance layout explicitly
-- use one ECS cluster with 5 EC2 instances
-- use `t3.small` for all 5 instances
-- use one ALB
-- use S3 for artifacts
-- keep local mode working alongside S3 mode
-- serve the frontend through `api-service` first
-- use ECS environment variables for secrets initially
-- document clearly that self-hosting PostgreSQL/Redis/RabbitMQ on ECS is cost-focused, not reliability-focused
-
-## Suggested Next Step
-
-After this document is approved, the next implementation step should be:
-
-- scaffold `infrastructure/` as a Python CDK app
-- create `NetworkStack`, `StorageStack`, and `ClusterStack` first
-- then add the ECS services one by one
+- `WORKER_WORK_ROOT`
+
+## Docker / Build Expectations
+
+CDK will assume Docker images already exist in ECR.
+
+Before deployment:
+
+1. build `api-service` image
+2. build `worker-service` image
+3. push `task-flow-api:<tag>`
+4. push `task-flow-worker:<tag>`
+5. set the image tags in `.env.cdk`
+6. run `cdk deploy`
+
+## Recommended Implementation Order
+
+1. Create `cdk/` CDK project in Python.
+2. Add `.env.cdk.example` and config loader.
+3. Build `TaskFlowStack` skeleton.
+4. Add VPC, security groups, ALB.
+5. Add ECS cluster and ASG.
+6. Add S3 bucket.
+7. Add CloudWatch log groups.
+8. Add ECS task definitions and services.
+9. Add internal connectivity for Postgres, Redis, RabbitMQ.
+10. Add stack outputs:
+   - ALB DNS name
+   - bucket name
+   - cluster name
+11. Deploy to a test AWS account.
+12. Validate:
+   - UI loads
+   - API works
+   - uploads work
+   - worker processes tasks
+   - artifacts download from S3-backed flow
+
+## Risks and Tradeoffs
+
+### Cost-first tradeoffs
+
+This design is intentionally low cost, but it has tradeoffs:
+
+- Postgres on ECS is not as reliable as RDS
+- Redis on ECS is not as reliable as ElastiCache
+- RabbitMQ on ECS is more operationally fragile than a managed service
+- ECS EC2 in public subnets is simpler and cheaper, but less ideal than private subnets plus NAT
+
+### Operational tradeoffs
+
+- `.env.cdk` is simple, but not the strongest secret-management model
+- one stack is easier now, but may get large later
+- soft placement is simpler, but not perfectly predictable
+
+## Future Improvements
+
+Later improvements could include:
+
+- move secrets to Secrets Manager
+- move Postgres to RDS
+- move Redis to ElastiCache
+- keep RabbitMQ or reevaluate queue architecture
+- serve frontend from S3 and optionally CloudFront
+- move ECS EC2 instances to private subnets with NAT or VPC endpoints
+- add HTTPS with ACM and Route53
+- split one stack into multiple stacks if needed

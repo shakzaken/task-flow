@@ -1,0 +1,7 @@
+.env.cdk
+.venv/
+.home/
+cdk.out/
+node_modules/
+*.pyc
+__pycache__/
