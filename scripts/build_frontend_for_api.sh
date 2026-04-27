@@ -17,7 +17,7 @@ fi
 
 (
   cd "$FRONTEND_DIR"
-  npm run build
+  VITE_API_BASE_URL= npm run build
 )
 
 rm -rf "$API_STATIC_DIR"

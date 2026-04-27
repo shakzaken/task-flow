@@ -1,15 +1,23 @@
 # Local Infrastructure Setup
 
-This document explains the Docker Compose local stack for this project. It runs PostgreSQL, RabbitMQ, Redis, MinIO, the migration job, the API service, and the worker service together.
+This project supports two local modes:
 
-The Docker Compose stack uses:
+1. Docker Compose
+2. Non-Docker local run
+
+Use Docker Compose when you want the full stack in containers.
+Use the non-Docker path when you want to run `api-service`, `worker-service`, and optionally `frontend-service` directly on your machine.
+
+---
+
+## Docker Compose Mode
+
+Docker Compose uses:
 
 - `api-service/.env.docker`
 - `worker-service/.env.docker`
 
----
-
-## Main Command
+### Main Command
 
 Start the full local stack from the repo root:
 
@@ -25,7 +33,7 @@ docker compose down -v
 
 ---
 
-## Docker Connection Values
+### Docker Connection Values
 
 Recommended local values across the Docker env files:
 
@@ -46,7 +54,7 @@ Recommended local values across the Docker env files:
 
 ---
 
-## Exposed Ports
+### Exposed Ports
 
 - App and API: `8000`
 - Worker health: `8001`
@@ -59,7 +67,7 @@ Recommended local values across the Docker env files:
 
 ---
 
-## Docker Services
+### Docker Services
 
 The stack includes these services:
 
@@ -75,7 +83,7 @@ The stack includes these services:
 
 ---
 
-## Docker Env Files
+### Docker Env Files
 
 The Docker stack does not use the normal local `.env` files. It uses:
 
@@ -86,7 +94,7 @@ These use Docker service names such as `postgres`, `redis`, `rabbitmq`, and `min
 
 ---
 
-## MinIO
+### MinIO
 
 MinIO is included in the main Compose stack, so you do not need the separate MinIO-only Compose file for the main local workflow.
 
@@ -112,7 +120,7 @@ The services can auto-create the local bucket on startup when `S3_AUTO_CREATE_BU
 
 ---
 
-## UI
+### UI
 
 The Docker local workflow serves the built UI from `api-service`. Open:
 
@@ -124,12 +132,101 @@ The standalone `frontend-service` dev server is no longer the main local workflo
 
 ---
 
-## Alternative Manual Setup
+---
 
-If you want to run infrastructure manually with Homebrew instead, you can still do that, but Docker Compose is now the recommended path.
+## Non-Docker Local Mode
 
-Check the installed PostgreSQL service name:
+Non-Docker local mode uses:
+
+- `api-service/.env`
+- `worker-service/.env`
+- `frontend-service/.env`
+
+### Non-Docker Infra
+
+You can run the infra locally outside Docker.
+
+PostgreSQL with Homebrew:
 
 ```bash
-brew services list
+brew services start postgresql@16
 ```
+
+RabbitMQ with Homebrew:
+
+```bash
+brew services start rabbitmq
+```
+
+Redis with Homebrew:
+
+```bash
+brew services start redis
+```
+
+For MinIO, you can either:
+
+1. run the native MinIO binary on your machine
+2. use the small MinIO-only Compose file:
+
+```bash
+docker compose -f docker-compose.minio.yml up -d
+```
+
+If you want a truly no-Docker path, use the native MinIO binary and point:
+
+```env
+S3_ENDPOINT=http://localhost:9000
+```
+
+in both `api-service/.env` and `worker-service/.env`.
+
+### Non-Docker App Processes
+
+Run the API:
+
+```bash
+cd api-service
+UV_CACHE_DIR=.uv-cache uv sync --dev
+uv run alembic upgrade head
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Run the worker:
+
+```bash
+cd worker-service
+UV_CACHE_DIR=.uv-cache uv sync --dev
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+```
+
+### Non-Docker UI Options
+
+Option A: run the frontend dev server
+
+```bash
+cd frontend-service
+npm install
+npm run dev
+```
+
+Option B: build the UI into the API and serve it from `api-service`
+
+```bash
+./scripts/build_frontend_for_api.sh
+```
+
+This build path forces `VITE_API_BASE_URL` to be empty so the bundled UI uses the same origin as the `api-service` serving the page.
+
+Then open:
+
+```text
+http://localhost:8000
+```
+
+### Summary
+
+Supported local options are now:
+
+- Docker Compose: everything in containers
+- Non-Docker: services on your machine, infra local, UI either Vite dev server or API-served build
