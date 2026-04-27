@@ -20,6 +20,9 @@ htmlcov/
 
 .venv/
 venv/
+cdk/.env.cdk
+cdk/cdk.out/
+cdk/.venv/
 
 node_modules/
 dist/

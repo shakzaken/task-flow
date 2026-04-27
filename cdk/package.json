@@ -1,0 +1,7 @@
+{
+  "name": "task-flow-cdk",
+  "private": true,
+  "devDependencies": {
+    "aws-cdk": "^2.1119.0"
+  }
+}
