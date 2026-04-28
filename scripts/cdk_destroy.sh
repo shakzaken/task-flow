@@ -52,7 +52,66 @@ fi
 load_env_file
 
 STACK_NAME="${STACK_NAME:-TaskFlowStack}"
+AWS_REGION="${AWS_REGION:-eu-west-1}"
+CLUSTER_NAME="${APP_NAME}-cluster"
 mkdir -p "$HOME"
+
+cleanup_ecs_capacity_provider_usage() {
+  local cluster_status
+  cluster_status="$(aws ecs describe-clusters \
+    --clusters "$CLUSTER_NAME" \
+    --region "$AWS_REGION" \
+    --query 'clusters[0].status' \
+    --output text 2>/dev/null || true)"
+
+  if [[ -z "$cluster_status" || "$cluster_status" == "None" || "$cluster_status" == "MISSING" || "$cluster_status" == "INACTIVE" ]]; then
+    return 0
+  fi
+
+  local services_output
+  services_output="$(aws ecs list-services \
+    --cluster "$CLUSTER_NAME" \
+    --region "$AWS_REGION" \
+    --query 'serviceArns' \
+    --output text 2>/dev/null || true)"
+
+  if [[ -n "$services_output" && "$services_output" != "None" ]]; then
+    echo "Deleting ECS services from cluster: $CLUSTER_NAME"
+    read -r -a services <<<"$services_output"
+    for service_arn in "${services[@]}"; do
+      aws ecs delete-service \
+        --cluster "$CLUSTER_NAME" \
+        --service "$service_arn" \
+        --force \
+        --region "$AWS_REGION" \
+        >/dev/null
+    done
+
+    aws ecs wait services-inactive \
+      --cluster "$CLUSTER_NAME" \
+      --services "${services[@]}" \
+      --region "$AWS_REGION"
+  fi
+
+  local capacity_providers
+  capacity_providers="$(aws ecs describe-clusters \
+    --clusters "$CLUSTER_NAME" \
+    --region "$AWS_REGION" \
+    --query 'clusters[0].capacityProviders' \
+    --output text 2>/dev/null || true)"
+
+  if [[ -n "$capacity_providers" && "$capacity_providers" != "None" ]]; then
+    echo "Clearing ECS capacity provider associations from cluster: $CLUSTER_NAME"
+    aws ecs put-cluster-capacity-providers \
+      --cluster "$CLUSTER_NAME" \
+      --capacity-providers "[]" \
+      --default-capacity-provider-strategy "[]" \
+      --region "$AWS_REGION" \
+      >/dev/null
+  fi
+}
+
+cleanup_ecs_capacity_provider_usage
 
 cd "$CDK_DIR"
 

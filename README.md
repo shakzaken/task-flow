@@ -1,102 +1,47 @@
 # Task Flow
 
-Task Flow is an asynchronous task-processing application built around a FastAPI `api-service`, a background `worker-service`, and a React/Vite `frontend-service`. The API accepts task creation and upload requests, persists task state in PostgreSQL, publishes background work to RabbitMQ, and serves task status for the UI. The worker executes background tasks and stores file inputs/outputs in S3-compatible object storage. Local development uses MinIO for object storage.
+## Overview
 
-## Local Workflow Options
+Task Flow gives users a simple place to submit file-based jobs and get back a finished result without waiting for the work to happen in the browser. A user can upload documents or images, choose an operation, and later return to see the task status and download the generated output. The overall experience is centered on turning common document workflows into queued background tasks that are easy to run through a web interface.
 
-You have two supported local development options:
+Under the hood, the application uses a React UI, an API service, and a worker service. The API stores task state in PostgreSQL, publishes work to RabbitMQ, and saves files in object storage, while the worker consumes queued tasks and performs operations such as image resize, PDF merge, PDF summary generation, and email sending. For local development the project runs with Docker, MinIO, PostgreSQL, Redis, and RabbitMQ, and for AWS deployment it uses the CDK project in this repository.
 
-1. Full Docker Compose stack
-2. Non-Docker local run with service processes on your machine
+## Technologies
 
-Docker-specific env files:
-
-- `api-service/.env.docker`
-- `worker-service/.env.docker`
-
-Start the full stack from the repo root:
-
-```bash
-docker compose up --build
-```
-
-Main endpoints:
-
-- App and API: `http://localhost:8000`
-- Worker health: `http://localhost:8001/health`
-- RabbitMQ management: `http://localhost:15672`
-- MinIO console: `http://localhost:9001`
-
-The Compose stack includes:
-
+- Python 3.13
+- FastAPI
+- Pydantic
+- SQLAlchemy
+- Alembic
 - PostgreSQL
-- Redis
 - RabbitMQ
-- MinIO
-- `api-service`
-- `worker-service`
+- Redis
+- S3-compatible object storage via MinIO locally and Amazon S3 in AWS
+- React
+- TypeScript
+- Vite
+- Docker and Docker Compose
+- AWS CDK
+- Amazon ECS on EC2
 
-`api-service` now runs Alembic migrations on startup before it begins serving requests.
+## Services
 
-To stop and remove the disposable local data:
+### frontend-service
 
-```bash
-docker compose down -v
-```
+`frontend-service` is the React application for the user interface. It lets users upload files, create tasks, check task progress, and download generated artifacts. In local non-Docker development it can run as its own Vite app, and in the integrated deployment flow its built static files are served by `api-service`.
 
-## Non-Docker Local Workflow
+### api-service
 
-If you want to run the application without Docker, use the normal service-local `.env` files:
+`api-service` is the main backend entrypoint of the system. It exposes the HTTP API, validates requests, manages task creation and lookup, publishes jobs to RabbitMQ, serves generated artifacts, applies rate limiting, and runs Alembic migrations on startup so the database schema is ready before the app begins serving traffic.
 
-- `api-service/.env`
-- `worker-service/.env`
-- `frontend-service/.env`
+### worker-service
 
-For non-Docker local infra, see [docs/LOCAL_INFRA_SETUP.md](/Users/yakir/projects/claude/task-flow/docs/LOCAL_INFRA_SETUP.md).
+`worker-service` is the background execution layer. It consumes queued tasks from RabbitMQ, downloads the required input files from object storage, performs the actual processing work, uploads the output artifacts, updates task state, and integrates with external providers such as Resend for email and OpenRouter for PDF summarization.
 
-Run the API:
+### cdk
 
-```bash
-cd api-service
-UV_CACHE_DIR=.uv-cache uv sync --dev
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
+`cdk` contains the AWS infrastructure definition for the project. Its role is to provision the cloud environment needed to run the application on AWS, including networking, ECS capacity, the load balancer, Cloud Map service discovery, log groups, IAM roles, and the S3 bucket used by the application in production.
 
-`api-service` runs pending Alembic migrations automatically on startup, so a separate manual `alembic upgrade head` step is no longer required for the normal local workflow.
+## Running And Deployment
 
-Run the worker:
-
-```bash
-cd worker-service
-UV_CACHE_DIR=.uv-cache uv sync --dev
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
-```
-
-For the UI, you have two non-Docker choices.
-
-Option A: run the frontend dev server
-
-```bash
-cd frontend-service
-npm install
-npm run dev
-```
-
-Option B: build the frontend into `api-service` and let the API serve it
-
-```bash
-./scripts/build_frontend_for_api.sh
-```
-
-That script forces a same-origin frontend build, so the bundled UI talks to whichever `api-service` host served the page instead of hardcoding `http://localhost:8000`.
-
-Then open:
-
-```text
-http://localhost:8000
-```
-
-This means both local workflows are supported:
-
-- Docker Compose: full app and infra in containers
-- Non-Docker: app services on your machine with local infra and service-local env files
+For local setup and AWS deployment steps, see [deployment.md](/Users/yakir/projects/claude/task-flow/deployment.md).

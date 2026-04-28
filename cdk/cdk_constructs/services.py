@@ -205,20 +205,12 @@ class ServicesConstruct(Construct):
         rabbitmq_container.add_port_mappings(ecs.PortMapping(container_port=config.rabbitmq_port))
         rabbitmq_container.add_port_mappings(ecs.PortMapping(container_port=15672))
 
-        capacity_strategy = [
-            ecs.CapacityProviderStrategy(
-                capacity_provider=cluster_resources.capacity_provider.capacity_provider_name,
-                weight=1,
-            )
-        ]
-
         api_service = ecs.Ec2Service(
             self,
             "ApiService",
             cluster=cluster_resources.cluster,
             task_definition=api_task_definition,
             desired_count=1,
-            capacity_provider_strategies=capacity_strategy,
             cloud_map_options=ecs.CloudMapOptions(
                 cloud_map_namespace=discovery.namespace,
                 name="api-service",
@@ -233,7 +225,6 @@ class ServicesConstruct(Construct):
             cluster=cluster_resources.cluster,
             task_definition=worker_task_definition,
             desired_count=1,
-            capacity_provider_strategies=capacity_strategy,
             cloud_map_options=ecs.CloudMapOptions(
                 cloud_map_namespace=discovery.namespace,
                 name="worker-service",
@@ -248,7 +239,6 @@ class ServicesConstruct(Construct):
             cluster=cluster_resources.cluster,
             task_definition=postgres_task_definition,
             desired_count=1,
-            capacity_provider_strategies=capacity_strategy,
             cloud_map_options=ecs.CloudMapOptions(
                 cloud_map_namespace=discovery.namespace,
                 name="postgres",
@@ -263,7 +253,6 @@ class ServicesConstruct(Construct):
             cluster=cluster_resources.cluster,
             task_definition=redis_task_definition,
             desired_count=1,
-            capacity_provider_strategies=capacity_strategy,
             cloud_map_options=ecs.CloudMapOptions(
                 cloud_map_namespace=discovery.namespace,
                 name="redis",
@@ -278,7 +267,6 @@ class ServicesConstruct(Construct):
             cluster=cluster_resources.cluster,
             task_definition=rabbitmq_task_definition,
             desired_count=1,
-            capacity_provider_strategies=capacity_strategy,
             cloud_map_options=ecs.CloudMapOptions(
                 cloud_map_namespace=discovery.namespace,
                 name="rabbitmq",
