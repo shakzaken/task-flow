@@ -34,11 +34,10 @@ npm install
 
 ## Run synth
 
-Use a local `HOME` so the JSII cache stays inside the repo:
+Use the shared script from the repo root:
 
 ```bash
-cd cdk
-HOME=$PWD/.home ./node_modules/.bin/cdk synth
+./scripts/cdk_synth.sh
 ```
 
 ## Notes
@@ -61,41 +60,39 @@ aws ecr create-repository --repository-name task-flow-worker
 Authenticate Docker to ECR:
 
 ```bash
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.us-east-1.amazonaws.com
+aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin <account-id>.dkr.ecr.eu-west-1.amazonaws.com
 ```
 
 ## Build and push images
 
-Choose one immutable tag, for example a git SHA:
+Use the shared script from the repo root:
 
 ```bash
-export IMAGE_TAG=<git-sha>
-export AWS_ACCOUNT_ID=<account-id>
-export AWS_REGION=us-east-1
+./scripts/push_images_to_ecr.sh
 ```
 
-Build the API image:
+By default it:
+
+- uses your AWS CLI credentials from `aws configure`
+- resolves the AWS account ID automatically
+- uses your configured AWS region
+- builds and pushes both images:
+  - `task-flow-api`
+  - `task-flow-worker`
+- tags both images as `latest`
+
+If needed, you can override the defaults:
 
 ```bash
-docker build -f api-service/Dockerfile -t task-flow-api:$IMAGE_TAG .
-docker tag task-flow-api:$IMAGE_TAG $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/task-flow-api:$IMAGE_TAG
-docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/task-flow-api:$IMAGE_TAG
-```
-
-Build the worker image:
-
-```bash
-docker build -f worker-service/Dockerfile -t task-flow-worker:$IMAGE_TAG .
-docker tag task-flow-worker:$IMAGE_TAG $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/task-flow-worker:$IMAGE_TAG
-docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/task-flow-worker:$IMAGE_TAG
+AWS_REGION=eu-west-1 IMAGE_TAG=latest ./scripts/push_images_to_ecr.sh
 ```
 
 Then set these values in `cdk/.env.cdk`:
 
-- `AWS_ACCOUNT=$AWS_ACCOUNT_ID`
-- `AWS_REGION=$AWS_REGION`
-- `API_IMAGE_TAG=$IMAGE_TAG`
-- `WORKER_IMAGE_TAG=$IMAGE_TAG`
+- `AWS_ACCOUNT=<your-account-id>`
+- `AWS_REGION=eu-west-1`
+- `API_IMAGE_TAG=latest`
+- `WORKER_IMAGE_TAG=latest`
 
 ## Deploy
 
@@ -107,12 +104,10 @@ UV_CACHE_DIR=../.uv-cache uv sync
 HOME=$PWD/.home ./node_modules/.bin/cdk bootstrap aws://$AWS_ACCOUNT_ID/$AWS_REGION
 ```
 
-Deploy:
+Deploy with the shared script:
 
 ```bash
-cd cdk
-UV_CACHE_DIR=../.uv-cache uv sync
-HOME=$PWD/.home ./node_modules/.bin/cdk deploy
+./scripts/cdk_deploy.sh
 ```
 
 Useful outputs after deploy:
@@ -126,6 +121,5 @@ Useful outputs after deploy:
 ## Destroy
 
 ```bash
-cd cdk
-HOME=$PWD/.home ./node_modules/.bin/cdk destroy
+./scripts/cdk_destroy.sh
 ```

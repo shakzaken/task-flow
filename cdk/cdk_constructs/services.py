@@ -224,8 +224,7 @@ class ServicesConstruct(Construct):
                 name="api-service",
             ),
             security_groups=[network.ecs_security_group],
-            vpc_subnets=ec2.SubnetSelection(subnet_group_name="PublicWorkloads"),
-            assign_public_ip=True,
+            vpc_subnets=ec2.SubnetSelection(subnet_group_name="PrivateWorkloads"),
         )
 
         worker_service = ecs.Ec2Service(
@@ -240,8 +239,7 @@ class ServicesConstruct(Construct):
                 name="worker-service",
             ),
             security_groups=[network.ecs_security_group],
-            vpc_subnets=ec2.SubnetSelection(subnet_group_name="PublicWorkloads"),
-            assign_public_ip=True,
+            vpc_subnets=ec2.SubnetSelection(subnet_group_name="PrivateWorkloads"),
         )
 
         postgres_service = ecs.Ec2Service(
@@ -256,8 +254,7 @@ class ServicesConstruct(Construct):
                 name="postgres",
             ),
             security_groups=[network.ecs_security_group],
-            vpc_subnets=ec2.SubnetSelection(subnet_group_name="PublicWorkloads"),
-            assign_public_ip=False,
+            vpc_subnets=ec2.SubnetSelection(subnet_group_name="PrivateWorkloads"),
         )
 
         redis_service = ecs.Ec2Service(
@@ -272,8 +269,7 @@ class ServicesConstruct(Construct):
                 name="redis",
             ),
             security_groups=[network.ecs_security_group],
-            vpc_subnets=ec2.SubnetSelection(subnet_group_name="PublicWorkloads"),
-            assign_public_ip=False,
+            vpc_subnets=ec2.SubnetSelection(subnet_group_name="PrivateWorkloads"),
         )
 
         rabbitmq_service = ecs.Ec2Service(
@@ -288,8 +284,7 @@ class ServicesConstruct(Construct):
                 name="rabbitmq",
             ),
             security_groups=[network.ecs_security_group],
-            vpc_subnets=ec2.SubnetSelection(subnet_group_name="PublicWorkloads"),
-            assign_public_ip=False,
+            vpc_subnets=ec2.SubnetSelection(subnet_group_name="PrivateWorkloads"),
         )
 
         load_balancer.http_listener.add_targets(

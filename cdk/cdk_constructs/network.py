@@ -23,7 +23,7 @@ class NetworkConstruct(Construct):
             self,
             "Vpc",
             max_azs=2,
-            nat_gateways=0,
+            nat_gateways=1,
             subnet_configuration=[
                 ec2.SubnetConfiguration(
                     name="PublicIngress",
@@ -31,8 +31,8 @@ class NetworkConstruct(Construct):
                     cidr_mask=24,
                 ),
                 ec2.SubnetConfiguration(
-                    name="PublicWorkloads",
-                    subnet_type=ec2.SubnetType.PUBLIC,
+                    name="PrivateWorkloads",
+                    subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
                     cidr_mask=24,
                 ),
             ],

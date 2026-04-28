@@ -12,6 +12,7 @@ from app.api.routes.frontend import DEFAULT_STATIC_DIR, router as frontend_route
 from app.api.routes.health import router as health_router
 from app.api.routes.tasks import router as tasks_router
 from app.api.routes.uploads import router as uploads_router
+from app.services.migration_runner import MigrationRunner, build_migration_runner
 from app.services.publisher import Publisher, RabbitMQPublisher
 from app.services.rate_limiter import NoopRateLimiter, RateLimiter, build_rate_limiter
 
@@ -19,9 +20,11 @@ from app.services.rate_limiter import NoopRateLimiter, RateLimiter, build_rate_l
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
+    migration_runner: MigrationRunner = app.state.migration_runner
     publisher = RabbitMQPublisher(settings.rabbitmq_url)
     rate_limiter = build_rate_limiter(settings.redis_url, settings.rate_limit_prefix)
     storage_service = build_storage_service(settings)
+    await migration_runner.run_pending_migrations()
     await publisher.connect()
     await storage_service.ensure_ready()
     app.state.publisher = publisher
@@ -39,6 +42,7 @@ def create_app(
     publisher: Publisher | None = None,
     rate_limiter: RateLimiter | None = None,
     settings: Settings | None = None,
+    migration_runner: MigrationRunner | None = None,
 ) -> FastAPI:
     resolved_settings = settings or get_settings()
     app = FastAPI(
@@ -50,6 +54,7 @@ def create_app(
     app.state.publisher = publisher or getattr(app.state, "publisher", None)
     app.state.rate_limiter = rate_limiter or NoopRateLimiter()
     app.state.storage_service = build_storage_service(resolved_settings)
+    app.state.migration_runner = migration_runner or build_migration_runner(resolved_settings)
     app.state.frontend_static_dir = DEFAULT_STATIC_DIR
     if resolved_settings.cors_allowed_origins:
         app.add_middleware(
