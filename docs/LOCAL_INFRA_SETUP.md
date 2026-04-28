@@ -75,11 +75,10 @@ The stack includes these services:
 - `redis`
 - `rabbitmq`
 - `minio`
-- `api-migrate`
 - `api-service`
 - `worker-service`
 
-`api-migrate` runs Alembic migrations before the API and worker start.
+`api-service` runs Alembic migrations on startup before it begins serving requests.
 
 ---
 
@@ -188,9 +187,10 @@ Run the API:
 ```bash
 cd api-service
 UV_CACHE_DIR=.uv-cache uv sync --dev
-uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+`api-service` now applies pending Alembic migrations automatically on startup, so the normal non-Docker flow does not need a separate `alembic upgrade head` command first.
 
 Run the worker:
 

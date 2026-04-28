@@ -47,6 +47,7 @@ Use the shared script from the repo root:
 - ECR repositories must already exist before deployment:
   - `task-flow-api`
   - `task-flow-worker`
+- `api-service` runs Alembic migrations on startup before serving traffic, so the AWS stack does not use a separate migration task.
 
 ## Create ECR repositories
 
