@@ -44,4 +44,4 @@ Under the hood, the application uses a React UI, an API service, and a worker se
 
 ## Running And Deployment
 
-For local setup and AWS deployment steps, see [deployment.md](/Users/yakir/projects/claude/task-flow/deployment.md).
+For local setup and AWS deployment steps, see [deployment.md](./deployment.md).
