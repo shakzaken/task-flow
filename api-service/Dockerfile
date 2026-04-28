@@ -2,6 +2,8 @@ FROM node:22-alpine AS frontend-builder
 
 WORKDIR /workspace/frontend-service
 
+ENV VITE_API_BASE_URL=
+
 COPY frontend-service/package.json frontend-service/package-lock.json ./
 RUN npm ci
 

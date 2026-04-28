@@ -25,7 +25,8 @@ class StorageConstruct(Construct):
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             enforce_ssl=True,
             versioned=False,
-            removal_policy=RemovalPolicy.RETAIN,
+            auto_delete_objects=True,
+            removal_policy=RemovalPolicy.DESTROY,
         )
 
         self.resources = StorageResources(artifacts_bucket=artifacts_bucket)

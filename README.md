@@ -33,9 +33,10 @@ The Compose stack includes:
 - Redis
 - RabbitMQ
 - MinIO
-- `api-migrate`
 - `api-service`
 - `worker-service`
+
+`api-service` now runs Alembic migrations on startup before it begins serving requests.
 
 To stop and remove the disposable local data:
 
@@ -58,9 +59,10 @@ Run the API:
 ```bash
 cd api-service
 UV_CACHE_DIR=.uv-cache uv sync --dev
-uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+`api-service` runs pending Alembic migrations automatically on startup, so a separate manual `alembic upgrade head` step is no longer required for the normal local workflow.
 
 Run the worker:
 

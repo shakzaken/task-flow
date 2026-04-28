@@ -58,7 +58,7 @@ class ClusterConstruct(Construct):
             self,
             "ClusterAsg",
             vpc=network.vpc,
-            vpc_subnets=ec2.SubnetSelection(subnet_group_name="PublicWorkloads"),
+            vpc_subnets=ec2.SubnetSelection(subnet_group_name="PrivateWorkloads"),
             instance_type=ec2.InstanceType("t3.small"),
             machine_image=ecs.EcsOptimizedImage.amazon_linux2(),
             desired_capacity=5,
