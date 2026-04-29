@@ -44,7 +44,6 @@ class AppConfig:
     output_storage_path: str
     openrouter_api_key: str
     openrouter_model: str
-    cors_allowed_origins: str
 
     @property
     def rabbitmq_url(self) -> str:
@@ -97,7 +96,6 @@ def load_app_config(env_file: str | Path | None = None) -> AppConfig:
         output_storage_path=_required_str(values, "OUTPUT_STORAGE_PATH"),
         openrouter_api_key=_required_str(values, "OPENROUTER_API_KEY"),
         openrouter_model=_required_str(values, "OPENROUTER_MODEL"),
-        cors_allowed_origins=values.get("CORS_ALLOWED_ORIGINS", ""),
     )
 
 

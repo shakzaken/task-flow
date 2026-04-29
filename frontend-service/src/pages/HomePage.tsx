@@ -21,6 +21,14 @@ interface HomePageProps {
   pollingIntervalMs?: number;
 }
 
+const PIPELINE_STEPS = [
+  "Upload and validate the source files",
+  "Persist metadata and queue the background task",
+  "Process in the Python worker and publish the artifact"
+];
+
+const SYSTEM_SURFACES = ["FastAPI API", "Python Worker", "RabbitMQ", "Redis", "PostgreSQL", "S3 / MinIO"];
+
 export default function HomePage({ pollingIntervalMs }: HomePageProps) {
   const [taskType, setTaskType] = useState<TaskType>("send_email");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -31,6 +39,12 @@ export default function HomePage({ pollingIntervalMs }: HomePageProps) {
     optimisticTasks,
     pollingIntervalMs
   );
+  const activeCount = tasks.filter(
+    (task) => task.status === "PENDING" || task.status === "PROCESSING"
+  ).length;
+  const completedCount = tasks.filter((task) => task.status === "COMPLETED").length;
+  const failedCount = tasks.filter((task) => task.status === "FAILED").length;
+  const latestTask = tasks[0];
 
   function addOptimisticTask(
     taskId: string,
@@ -101,36 +115,132 @@ export default function HomePage({ pollingIntervalMs }: HomePageProps) {
 
   return (
     <main className="page-shell">
-      <section className="hero">
-        <p className="eyebrow">Task Flow Console</p>
-        <h1>Submit work and monitor queue activity in one place.</h1>
-        <p className="hero-copy">
-          Create email and image jobs from the control panel, then review the latest ten tasks and
-          their current status without leaving the page.
-        </p>
-      </section>
+      <div className="app-frame">
+        <aside className="sidebar">
+          <div className="sidebar-brand">
+            <span className="sidebar-brand-icon" aria-hidden="true">
+              ✦
+            </span>
+            <div>
+              <p className="sidebar-brand-label">Workspace</p>
+              <h1>Task Flow</h1>
+            </div>
+          </div>
 
-      <div className="layout-grid">
-        <section className="stack">
-          <TaskTypeSelector onChange={setTaskType} value={taskType} />
-          {submitError ? <p className="banner banner-error">Request failed: {submitError}</p> : null}
-          {taskType === "send_email" ? (
-            <SendEmailForm disabled={isSubmitting} onSubmit={handleSendEmailSubmit} />
-          ) : taskType === "merge_pdfs" ? (
-            <MergePdfsForm disabled={isSubmitting} onSubmit={handleMergePdfsSubmit} />
-          ) : taskType === "summarize_pdf" ? (
-            <SummarizePdfForm disabled={isSubmitting} onSubmit={handleSummarizePdfSubmit} />
-          ) : (
-            <ResizeImageForm disabled={isSubmitting} onSubmit={handleResizeImageSubmit} />
-          )}
+          <div className="sidebar-section">
+            <p className="sidebar-section-title">Pipeline</p>
+            <ol className="sidebar-step-list">
+              {PIPELINE_STEPS.map((step, index) => (
+                <li className="sidebar-step-item" key={step}>
+                  <span className="sidebar-step-index">0{index + 1}</span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          <div className="sidebar-section">
+            <p className="sidebar-section-title">Core Services</p>
+            <div className="sidebar-service-list">
+              {SYSTEM_SURFACES.map((surface) => (
+                <span className="sidebar-service-pill" key={surface}>
+                  {surface}
+                </span>
+              ))}
+            </div>
+          </div>
+        </aside>
+
+        <section className="dashboard-main">
+          <header className="dashboard-header">
+            <div>
+              <p className="eyebrow">Operations Hub</p>
+              <h2>Dashboard</h2>
+              <p className="dashboard-copy">
+                Launch background file workflows, monitor queue activity, and collect finished
+                artifacts from one control surface.
+              </p>
+            </div>
+          </header>
+
+          <section className="dashboard-top-grid">
+            <article className="summary-card summary-card-primary">
+              <div className="summary-card-icon" aria-hidden="true">
+                ◎
+              </div>
+              <div>
+                <p className="summary-card-label">Queue activity</p>
+                <strong>{activeCount}</strong>
+                <p className="summary-card-copy">Tasks currently moving through the worker pipeline.</p>
+              </div>
+            </article>
+
+            <article className="summary-card">
+              <div className="summary-card-icon" aria-hidden="true">
+                ✓
+              </div>
+              <div>
+                <p className="summary-card-label">Completed</p>
+                <strong>{completedCount}</strong>
+                <p className="summary-card-copy">Recent jobs ready for review and download.</p>
+              </div>
+            </article>
+
+            <article className="summary-card">
+              <div className="summary-card-icon" aria-hidden="true">
+                !
+              </div>
+              <div>
+                <p className="summary-card-label">Failed</p>
+                <strong>{failedCount}</strong>
+                <p className="summary-card-copy">Items that need a retry or a payload fix.</p>
+              </div>
+            </article>
+
+            <article className="summary-card">
+              <div className="summary-card-icon" aria-hidden="true">
+                → 
+              </div>
+              <div>
+                <p className="summary-card-label">Latest event</p>
+                <strong>{latestTask ? latestTask.type.replace(/_/g, " ") : "No tasks yet"}</strong>
+                <p className="summary-card-copy">
+                  {latestTask
+                    ? `${latestTask.status} · ${new Date(latestTask.updated_at).toLocaleTimeString()}`
+                    : "Submit your first task to light up the feed."}
+                </p>
+              </div>
+            </article>
+          </section>
+
+          <div className="dashboard-content-grid">
+            <section className="workspace-column">
+              <div className="workspace-header">
+                <p className="eyebrow">File Upload</p>
+                <h3>Prepare and dispatch a task</h3>
+              </div>
+
+              <TaskTypeSelector onChange={setTaskType} value={taskType} />
+              {submitError ? <p className="banner banner-error">Request failed: {submitError}</p> : null}
+              {taskType === "send_email" ? (
+                <SendEmailForm disabled={isSubmitting} onSubmit={handleSendEmailSubmit} />
+              ) : taskType === "merge_pdfs" ? (
+                <MergePdfsForm disabled={isSubmitting} onSubmit={handleMergePdfsSubmit} />
+              ) : taskType === "summarize_pdf" ? (
+                <SummarizePdfForm disabled={isSubmitting} onSubmit={handleSummarizePdfSubmit} />
+              ) : (
+                <ResizeImageForm disabled={isSubmitting} onSubmit={handleResizeImageSubmit} />
+              )}
+            </section>
+
+            <TaskStatusPanel
+              error={pollingError}
+              isPolling={isPolling}
+              isSubmitting={isSubmitting}
+              tasks={tasks}
+            />
+          </div>
         </section>
-
-        <TaskStatusPanel
-          error={pollingError}
-          isPolling={isPolling}
-          isSubmitting={isSubmitting}
-          tasks={tasks}
-        />
       </div>
     </main>
   );

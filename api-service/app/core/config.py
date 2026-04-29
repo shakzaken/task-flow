@@ -7,7 +7,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_environment: str = Field(default="development", alias="APP_ENVIRONMENT")
-    cors_allowed_origins_raw: str = Field(default="", alias="CORS_ALLOWED_ORIGINS")
     database_url_override: str | None = Field(default=None, alias="DATABASE_URL")
     api_port: int = Field(default=8000, alias="API_PORT")
     postgres_host: str = Field(default="localhost", alias="POSTGRES_HOST")
@@ -39,8 +38,11 @@ class Settings(BaseSettings):
     )
 
     @property
-    def cors_allowed_origins(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_allowed_origins_raw.split(",") if origin.strip()]
+    def cors_allow_all_origins(self) -> bool:
+        return (
+            self.app_environment.lower() == "development"
+            and self.postgres_host in {"localhost", "127.0.0.1"}
+        )
 
     @property
     def sync_database_url(self) -> str:

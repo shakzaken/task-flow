@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 import { uploadFile } from "../api/uploads";
+import FileUploadField from "./FileUploadField";
 import type { ResizeImagePayload } from "../types/task";
 
 interface ResizeImageFormProps {
@@ -74,16 +75,15 @@ export default function ResizeImageForm({ disabled = false, onSubmit }: ResizeIm
         <h2>Upload first, then request deterministic output dimensions.</h2>
       </div>
 
-      <label className="field">
-        <span>Image File</span>
-        <input
-          accept="image/*"
-          name="image"
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          type="file"
-        />
-        {errors.file ? <span className="field-error">{errors.file}</span> : null}
-      </label>
+      <FileUploadField
+        accept="image/*"
+        error={errors.file}
+        helperText="Drop an image asset here before requesting a resized output."
+        id="image"
+        label="Image File"
+        onChange={setFile}
+        selectedFile={file}
+      />
 
       <div className="field-row">
         <label className="field">

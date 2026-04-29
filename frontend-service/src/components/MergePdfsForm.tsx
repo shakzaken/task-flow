@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 import { uploadFile } from "../api/uploads";
+import FileUploadField from "./FileUploadField";
 import type { MergePdfsPayload } from "../types/task";
 
 interface MergePdfsFormProps {
@@ -73,27 +74,25 @@ export default function MergePdfsForm({ disabled = false, onSubmit }: MergePdfsF
         <h2>Upload two PDFs and combine them into one ordered document.</h2>
       </div>
 
-      <label className="field">
-        <span>First PDF</span>
-        <input
-          accept="application/pdf,.pdf"
-          name="first-pdf"
-          onChange={(event) => setFirstFile(event.target.files?.[0] ?? null)}
-          type="file"
-        />
-        {errors.firstFile ? <span className="field-error">{errors.firstFile}</span> : null}
-      </label>
+      <FileUploadField
+        accept="application/pdf,.pdf"
+        error={errors.firstFile}
+        helperText="Drag in the first source PDF or browse your files."
+        id="first-pdf"
+        label="First PDF"
+        onChange={setFirstFile}
+        selectedFile={firstFile}
+      />
 
-      <label className="field">
-        <span>Second PDF</span>
-        <input
-          accept="application/pdf,.pdf"
-          name="second-pdf"
-          onChange={(event) => setSecondFile(event.target.files?.[0] ?? null)}
-          type="file"
-        />
-        {errors.secondFile ? <span className="field-error">{errors.secondFile}</span> : null}
-      </label>
+      <FileUploadField
+        accept="application/pdf,.pdf"
+        error={errors.secondFile}
+        helperText="Drag in the second source PDF or browse your files."
+        id="second-pdf"
+        label="Second PDF"
+        onChange={setSecondFile}
+        selectedFile={secondFile}
+      />
 
       {uploadError ? <p className="banner banner-error">{uploadError}</p> : null}
       {uploadPaths ? (

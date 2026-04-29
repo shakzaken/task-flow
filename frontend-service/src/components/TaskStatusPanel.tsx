@@ -26,20 +26,74 @@ function formatTimestamp(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+function formatRelativeTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+
+  if (diffMinutes < 1) {
+    return "just now";
+  }
+  if (diffMinutes < 60) {
+    return `${diffMinutes}m ago`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
 export default function TaskStatusPanel({
   error,
   isPolling,
   isSubmitting,
   tasks
 }: TaskStatusPanelProps) {
+  const completedCount = tasks.filter((task) => task.status === "COMPLETED").length;
+  const runningCount = tasks.filter(
+    (task) => task.status === "PENDING" || task.status === "PROCESSING"
+  ).length;
+  const failedCount = tasks.filter((task) => task.status === "FAILED").length;
+
   return (
     <section className="panel status-panel">
       <div className="status-panel-top">
         <div>
           <p className="eyebrow">Recent Tasks</p>
-          <h2>Latest 10 task executions</h2>
+          <h2>Execution feed and artifact history</h2>
+          <p className="status-panel-copy">
+            Follow the latest activity coming out of the queue and download outputs as soon as they
+            are ready.
+          </p>
         </div>
         {isPolling ? <p className="inline-note">Refreshing...</p> : null}
+      </div>
+
+      <div className="status-summary-grid">
+        <article className="status-summary-card">
+          <span className="status-summary-value">{tasks.length}</span>
+          <span className="status-summary-label">Recent tasks</span>
+        </article>
+        <article className="status-summary-card">
+          <span className="status-summary-value">{runningCount}</span>
+          <span className="status-summary-label">In flight</span>
+        </article>
+        <article className="status-summary-card">
+          <span className="status-summary-value">{completedCount}</span>
+          <span className="status-summary-label">Completed</span>
+        </article>
+        <article className="status-summary-card">
+          <span className="status-summary-value">{failedCount}</span>
+          <span className="status-summary-label">Failed</span>
+        </article>
       </div>
 
       {error ? <p className="banner banner-error">Status request failed: {error}</p> : null}
@@ -54,7 +108,10 @@ export default function TaskStatusPanel({
             <article className="task-row" key={task.id}>
               <div className="task-row-main">
                 <div className="task-row-title">
-                  <h3>{formatTaskType(task.type)}</h3>
+                  <div className="task-row-heading">
+                    <h3>{formatTaskType(task.type)}</h3>
+                    <p className="task-row-relative-time">{formatRelativeTimestamp(task.updated_at)}</p>
+                  </div>
                   <span className={`status-pill status-${task.status.toLowerCase()}`}>
                     {task.status}
                   </span>
