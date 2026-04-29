@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,6 +17,8 @@ from app.services.migration_runner import MigrationRunner, build_migration_runne
 from app.services.publisher import Publisher, RabbitMQPublisher
 from app.services.rate_limiter import NoopRateLimiter, RateLimiter, build_rate_limiter
 
+logger = logging.getLogger("uvicorn.error")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -24,9 +27,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     publisher = RabbitMQPublisher(settings.rabbitmq_url)
     rate_limiter = build_rate_limiter(settings.redis_url, settings.rate_limit_prefix)
     storage_service = build_storage_service(settings)
-    await migration_runner.run_pending_migrations()
-    await publisher.connect()
-    await storage_service.ensure_ready()
+
+    logger.info("Starting application startup sequence")
+
+    try:
+        logger.info("Running database migrations")
+        await migration_runner.run_pending_migrations()
+        logger.info("Database migrations completed")
+
+        logger.info("Connecting RabbitMQ publisher to %s", settings.rabbitmq_url)
+        await publisher.connect()
+        logger.info("RabbitMQ publisher connected")
+
+        logger.info(
+            "Ensuring object storage is ready (bucket=%s, endpoint=%s)",
+            settings.s3_bucket,
+            settings.s3_endpoint or "aws",
+        )
+        await storage_service.ensure_ready()
+        logger.info("Object storage is ready")
+    except Exception:
+        logger.exception("Application startup failed")
+        await storage_service.close()
+        await publisher.close()
+        await rate_limiter.close()
+        raise
+
     app.state.publisher = publisher
     app.state.rate_limiter = rate_limiter
     app.state.storage_service = storage_service
@@ -56,11 +82,12 @@ def create_app(
     app.state.storage_service = build_storage_service(resolved_settings)
     app.state.migration_runner = migration_runner or build_migration_runner(resolved_settings)
     app.state.frontend_static_dir = DEFAULT_STATIC_DIR
-    if resolved_settings.cors_allowed_origins:
+    if resolved_settings.cors_allow_all_origins:
+        
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=resolved_settings.cors_allowed_origins,
-            allow_credentials=True,
+            allow_origins=["*"],
+            allow_credentials=False,
             allow_methods=["*"],
             allow_headers=["*"],
         )

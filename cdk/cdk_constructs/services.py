@@ -71,7 +71,6 @@ class ServicesConstruct(Construct):
             ),
             environment={
                 "APP_ENVIRONMENT": "production",
-                "CORS_ALLOWED_ORIGINS": config.cors_allowed_origins,
                 "API_PORT": str(config.api_port),
                 "POSTGRES_HOST": discovery.postgres_hostname,
                 "POSTGRES_PORT": str(config.postgres_port),

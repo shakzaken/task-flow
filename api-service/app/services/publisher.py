@@ -10,7 +10,7 @@ from aio_pika.abc import AbstractChannel, AbstractConnection, AbstractExchange
 
 from app.schemas.task import TaskType
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("uvicorn.error")
 
 
 class Publisher(Protocol):

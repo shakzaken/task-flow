@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 
 import { uploadFile } from "../api/uploads";
+import FileUploadField from "./FileUploadField";
 import type { SummarizePdfPayload } from "../types/task";
 
 interface SummarizePdfFormProps {
@@ -47,16 +48,15 @@ export default function SummarizePdfForm({ disabled = false, onSubmit }: Summari
         <h2>Upload one PDF and generate a downloadable summary document.</h2>
       </div>
 
-      <label className="field">
-        <span>PDF File</span>
-        <input
-          accept="application/pdf,.pdf"
-          name="pdf"
-          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-          type="file"
-        />
-        {fileError ? <span className="field-error">{fileError}</span> : null}
-      </label>
+      <FileUploadField
+        accept="application/pdf,.pdf"
+        error={fileError}
+        helperText="Drop a PDF here to generate a summarized output document."
+        id="pdf"
+        label="PDF File"
+        onChange={setFile}
+        selectedFile={file}
+      />
 
       {uploadError ? <p className="banner banner-error">{uploadError}</p> : null}
       {uploadPath ? <p className="inline-note">Uploaded reference: {uploadPath}</p> : null}

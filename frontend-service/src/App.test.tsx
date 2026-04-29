@@ -322,7 +322,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /create task/i }));
 
     await waitFor(() => expect(screen.getByText("COMPLETED")).toBeInTheDocument());
-    expect(screen.getByText("Latest 10 task executions")).toBeInTheDocument();
+    expect(screen.getByText("Execution feed and artifact history")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Download image" })).toHaveAttribute(
       "href",
       "http://localhost:8000/artifacts/outputs/task-2/output.png"
